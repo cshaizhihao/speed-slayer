@@ -211,6 +211,73 @@ run_tcp_backend_visible() {
   fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
 }
 
+native_speed_tcp_tune() {
+  local ipv6_choice="$1"
+  section "Speed Slayer 原生 TCP Profile"
+  progress_step 20 "写入 sysctl 网络参数"
+  cat > /etc/sysctl.d/99-speed-slayer-tcp.conf <<'EOF'
+# Speed Slayer native TCP profile
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_keepalive_time = 600
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.tcp_max_syn_backlog = 8192
+net.core.somaxconn = 4096
+net.core.netdev_max_backlog = 5000
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.ipv4.ip_local_port_range = 1024 65535
+vm.swappiness = 10
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 5
+EOF
+  progress_step 40 "应用 sysctl 参数"
+  sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-speed-slayer-tcp.conf >/dev/null 2>&1 || true
+
+  progress_step 55 "应用网卡 FQ 队列"
+  local dev
+  for dev in $(ls /sys/class/net 2>/dev/null | grep -vE '^(lo|docker|veth|br-|virbr|tun|tap)'); do
+    tc qdisc replace dev "$dev" root fq >/dev/null 2>&1 || true
+  done
+
+  progress_step 70 "优化文件描述符限制"
+  if ! grep -q 'Speed Slayer file descriptor limits' /etc/security/limits.conf 2>/dev/null; then
+    cat >> /etc/security/limits.conf <<'EOF'
+# Speed Slayer file descriptor limits
+* soft nofile 1048576
+* hard nofile 1048576
+root soft nofile 1048576
+root hard nofile 1048576
+EOF
+  fi
+
+  progress_step 82 "IPv6 策略"
+  if [[ "$ipv6_choice" =~ ^[Yy]$ ]]; then
+    cat > /etc/sysctl.d/99-speed-slayer-disable-ipv6.conf <<'EOF'
+# Speed Slayer optional IPv6 disable
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+EOF
+    sysctl -p /etc/sysctl.d/99-speed-slayer-disable-ipv6.conf >/dev/null 2>&1 || true
+  else
+    rm -f /etc/sysctl.d/99-speed-slayer-disable-ipv6.conf
+  fi
+
+  progress_step 92 "验证 BBR / FQ 状态"
+  echo "congestion=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+  echo "qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+  progress_step 100 "原生 TCP Profile 完成"
+}
+
 prepare_tcp_core_lib() {
   local src="$1" out
   out="$(mktemp /tmp/speed-slayer-tcp-core.XXXXXX.sh)"
@@ -222,6 +289,11 @@ prepare_tcp_core_lib() {
 
 run_tcp_backend_silent() {
   local ipv6_choice="$1"
+  if [ "${SPEED_TCP_MODE:-native}" = "native" ]; then
+    native_speed_tcp_tune "$ipv6_choice"
+    return 0
+  fi
+
   local src core
   if [ -s "$TCP_CORE_LIB_LOCAL" ]; then
     core="$TCP_CORE_LIB_LOCAL"
@@ -236,17 +308,17 @@ run_tcp_backend_silent() {
   # shellcheck disable=SC1090
   source "$core"
   AUTO_MODE=1
-  echo "[15%] 调用 bbr_configure_direct"
+  echo "[15%] legacy: bbr_configure_direct"
   bbr_configure_direct
-  echo "[35%] 调用 dns_purify_and_harden"
+  echo "[35%] legacy: dns_purify_and_harden"
   dns_purify_and_harden
-  echo "[55%] 调用 realm_fix_timeout"
+  echo "[55%] legacy: realm_fix_timeout"
   realm_fix_timeout
   if [[ "$ipv6_choice" =~ ^[Yy]$ ]]; then
-    echo "[75%] 调用 disable_ipv6_permanent"
+    echo "[75%] legacy: disable_ipv6_permanent"
     disable_ipv6_permanent
   else
-    echo "[75%] 跳过 IPv6 永久禁用"
+    echo "[75%] legacy: 跳过 IPv6 永久禁用"
   fi
   AUTO_MODE=""
 }
@@ -285,7 +357,7 @@ run_tcp_optimize() {
   progress_step 35 "DNS 净化与网络稳定性修复"
   progress_step 55 "Realm 首连超时修复"
   progress_step 75 "IPv6 策略：${ipv6_choice}"
-  run_with_progress "Speed Slayer TCP 核心函数调优" "$WORK_DIR/tcp-optimize.log" run_tcp_backend_silent "$ipv6_choice"
+  run_with_progress "Speed Slayer 原生 TCP 调优" "$WORK_DIR/tcp-optimize.log" run_tcp_backend_silent "$ipv6_choice"
   progress_step 100 "TCP 调优完成"
   tcp_status_panel || true
 }
