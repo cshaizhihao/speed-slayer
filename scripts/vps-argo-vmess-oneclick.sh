@@ -56,7 +56,7 @@ EOF
 
 intro() {
   printf "%b%s%b\n" "$C_CYAN" "  Speed Slayer 是一个 VPS 网络加速与 Argo 隧道一键脚本。" "$C_RESET"
-  printf "%b%s%b\n" "$C_WHITE" "  功能：BBR v3 / XanMod 网络调优 + 原生 Cloudflare Argo VMess WebSocket 节点生成。" "$C_RESET"
+  printf "%b%s%b\n" "$C_WHITE" "  功能：BBR v3 网络优化 + Cloudflare Argo VMess WebSocket 节点生成。" "$C_RESET"
   printf "%b%s%b\n" "$C_DIM" "  Version: ${SPEED_SLAYER_VERSION} | Author: NodeSeek @cshaizhihao" "$C_RESET"
   echo ""
 }
@@ -237,9 +237,9 @@ detect_x64_level() {
 }
 
 native_install_xanmod_kernel() {
-  section "Speed Slayer 原生 XanMod / BBR v3 内核安装"
+  section "Speed Slayer · 内核加速组件"
   if [ "$(uname -m)" != "x86_64" ]; then
-    warn "原生内核安装当前只覆盖 x86_64；将回退 legacy 上游安装器。"
+    warn "当前架构暂未适配自动内核安装，将切换到兼容安装路径。"
     return 2
   fi
   if [ ! -r /etc/os-release ]; then
@@ -249,7 +249,7 @@ native_install_xanmod_kernel() {
   # shellcheck disable=SC1091
   . /etc/os-release
   if [ "${ID:-}" != "debian" ] && [ "${ID:-}" != "ubuntu" ]; then
-    warn "原生 XanMod 安装当前只覆盖 Debian/Ubuntu；将回退 legacy 上游安装器。"
+    warn "当前系统暂未适配自动内核安装，将切换到兼容安装路径。"
     return 2
   fi
 
@@ -310,13 +310,13 @@ run_tcp_backend_visible() {
       return "$code"
     fi
   fi
-  warn "使用 legacy 上游内核安装器。"
+  warn "正在切换到兼容安装路径。"
   fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
 }
 
 native_speed_tcp_tune() {
   local ipv6_choice="$1"
-  section "Speed Slayer 原生 TCP Profile"
+  section "Speed Slayer · TCP 加速配置"
   progress_step 20 "写入 sysctl 网络参数"
   cat > /etc/sysctl.d/99-speed-slayer-tcp.conf <<'EOF'
 # Speed Slayer native TCP profile
@@ -378,13 +378,13 @@ EOF
   progress_step 92 "验证 BBR / FQ 状态"
   echo "congestion=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
   echo "qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
-  progress_step 100 "原生 TCP Profile 完成"
+  progress_step 100 "TCP 加速配置完成"
 }
 
 prepare_tcp_core_lib() {
   local src="$1" out
   out="$(mktemp /tmp/speed-slayer-tcp-core.XXXXXX.sh)"
-  # 删除上游脚本最后的 main "$@"，只加载函数，不启动菜单。
+  # 生成可加载的 TCP 函数库，避免启动交互菜单。
   sed '/^[[:space:]]*main[[:space:]]*"\$@"[[:space:]]*$/d' "$src" > "$out"
   bash -n "$out"
   echo "$out"
@@ -411,17 +411,17 @@ run_tcp_backend_silent() {
   # shellcheck disable=SC1090
   source "$core"
   AUTO_MODE=1
-  echo "[15%] legacy: bbr_configure_direct"
+  echo "[15%] TCP 核心优化"
   bbr_configure_direct
-  echo "[35%] legacy: dns_purify_and_harden"
+  echo "[35%] DNS 与网络稳定性"
   dns_purify_and_harden
-  echo "[55%] legacy: realm_fix_timeout"
+  echo "[55%] 首连稳定性修复"
   realm_fix_timeout
   if [[ "$ipv6_choice" =~ ^[Yy]$ ]]; then
-    echo "[75%] legacy: disable_ipv6_permanent"
+    echo "[75%] IPv6 策略应用"
     disable_ipv6_permanent
   else
-    echo "[75%] legacy: 跳过 IPv6 永久禁用"
+    echo "[75%] 跳过 IPv6 永久禁用"
   fi
   AUTO_MODE=""
 }
@@ -455,12 +455,12 @@ run_tcp_optimize() {
   fi
 
   section "执行 TCP 网络调优"
-  info "默认使用 Speed Slayer 原生 TCP Profile，不会出现‘选择服务器主要服务地区’这类上游交互。"
+  info "正在应用 Speed Slayer TCP 加速配置。"
   progress_step 15 "BBR v3 / FQ / TCP buffer 参数"
   progress_step 35 "DNS 净化与网络稳定性修复"
   progress_step 55 "Realm 首连超时修复"
   progress_step 75 "IPv6 策略：${ipv6_choice}"
-  run_with_progress "Speed Slayer 原生 TCP 调优" "$WORK_DIR/tcp-optimize.log" run_tcp_backend_silent "$ipv6_choice"
+  run_with_progress "Speed Slayer TCP 加速配置" "$WORK_DIR/tcp-optimize.log" run_tcp_backend_silent "$ipv6_choice"
   progress_step 100 "TCP 调优完成"
   tcp_status_panel || true
 }
@@ -512,7 +512,7 @@ write_argox_vmess_config() {
   } > "$CONFIG_FILE"
 
   chmod 600 "$CONFIG_FILE"
-  success "已生成原生 VMess+WS 配置：$CONFIG_FILE"
+  success "已生成 VMess+WS 配置：$CONFIG_FILE"
   info "协议：VMess + WebSocket | Path：/${ws_path}-vm | Xray：${start_port} | Nginx：${nginx_port}"
 }
 
@@ -692,7 +692,7 @@ progress_step() {
 }
 
 native_argo_install_staged() {
-  section "原生安装 Argo VMess+WS"
+  section "Speed Slayer · Argo VMess+WS"
   load_speed_config
   progress_step 10 "安装基础依赖"
   install_base_deps >>"$LOG_FILE" 2>&1
@@ -740,7 +740,7 @@ install_argo_vmess_ws() {
   require_root
   clean_argo_state >/dev/null 2>&1 || true
   write_argox_vmess_config
-  info "启动原生 Argo VMess+WS 安装（不再调用 ArgoX 全家桶）"
+  info "正在部署 Argo VMess+WS 节点。"
   native_argo_install_staged
   verify_vmess_only
   success "Argo VMess+WS 安装流程结束"
@@ -757,7 +757,7 @@ show_argo_vmess_ws_info() {
 uninstall_argo_vmess_ws() {
   render_header_once
   require_root
-  warn "卸载 Speed Slayer 原生 Argo VMess+WS 服务"
+  warn "卸载 Speed Slayer Argo VMess+WS 服务"
   systemctl stop argo xray >/dev/null 2>&1 || true
   pkill -f 'nginx.*argox/nginx.conf' >/dev/null 2>&1 || true
   systemctl disable argo xray >/dev/null 2>&1 || true
@@ -769,13 +769,13 @@ uninstall_argo_vmess_ws() {
 
 clean_argo_state() {
   require_root
-  warn "清理旧 Argo/全家桶残留，用于恢复到 Speed Slayer 原生 VMess+WS。"
+  warn "清理现有 Argo 配置并备份数据。"
   systemctl stop argo xray nginx >/dev/null 2>&1 || true
   systemctl disable argo xray >/dev/null 2>&1 || true
   rm -f /etc/systemd/system/argo.service /etc/systemd/system/xray.service
   systemctl daemon-reload >/dev/null 2>&1 || true
   mv /etc/argox "/etc/argox.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
-  success "旧 Argo 残留已备份清理；现在可执行：speed --install-argo-vmess"
+  success "Argo 配置已备份清理；现在可执行：speed --install-argo-vmess"
 }
 
 force_all() {
@@ -990,10 +990,10 @@ Commands:
   --install-argo-vmess   安装/重装 Argo VMess + WS，并生成节点/订阅 URL
   --all                  显示交互主页（安全默认，不直接修改系统）
   --force-all            无人值守完整流程；如需重启，重启后执行 speed 即可继续
-  --continue             重启后继续：TCP 网络调优 + Argo VMess + WS（兼容旧用法）
+  --continue             重启后继续：TCP 网络调优 + Argo VMess + WS
   --show-url             查看已生成的节点/订阅信息
   --uninstall-argo       卸载 Argo VMess + WS 相关服务
-  --clean-argo           清理旧 Argo 残留，备份 /etc/argox 后重装纯 VMess+WS
+  --clean-argo           清理现有 Argo 配置，备份 /etc/argox 后重装 VMess+WS
   --write-config         仅生成 Argo VMess + WS 配置文件，不安装
   --install-shortcut     安装 speed 快捷命令到 /usr/local/bin/speed
   --clear-state          清理续跑状态
@@ -1013,7 +1013,7 @@ Optional environment variables:
   NODE_NAME              指定节点名，默认 VPS-Argo-VMess
   ARGO_DOMAIN            固定 Argo 域名；不填则使用 trycloudflare 临时域名
   ARGO_AUTH              Argo Token / Json / Cloudflare API 信息；固定隧道时使用
-  SERVER                 优选 CDN 地址，默认 www.visa.com
+  SERVER                 CDN 优选地址，默认 www.visa.com
   SERVER_PORT            优选 CDN 端口，默认 443
 
 Examples:
@@ -1028,7 +1028,7 @@ menu_body() {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  Speed Slayer · 主页
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-介绍：BBR v3 / XanMod 网络调优 + 原生 Argo VMess WebSocket 节点生成
+介绍：BBR v3 网络优化 + Argo VMess WebSocket 节点生成
 署名：NodeSeek @cshaizhihao
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. 一键执行完整流程（TCP 优化 + Argo VMess + WS）
@@ -1037,7 +1037,7 @@ menu_body() {
 4. 安装/重装 Argo VMess + WS
 5. 查看节点/订阅信息
 6. 卸载 Argo VMess + WS
-7. 清理旧 Argo 残留
+7. 清理 Argo 配置
 8. 安装 speed 快捷命令
 9. 重启后继续安装
 10. 环境检测
