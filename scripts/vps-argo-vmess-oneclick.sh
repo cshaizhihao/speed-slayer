@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
 
 TCP_SCRIPT_LOCAL="${SCRIPT_DIR}/tcp-one-click-optimize.sh"
+TCP_CORE_LIB_LOCAL="${SCRIPT_DIR}/lib/tcp-core.sh"
 
 WORK_DIR="/etc/vps-argo-vmess"
 CONFIG_FILE="${WORK_DIR}/install.conf"
@@ -222,12 +223,16 @@ prepare_tcp_core_lib() {
 run_tcp_backend_silent() {
   local ipv6_choice="$1"
   local src core
-  if [ -s "$TCP_SCRIPT_LOCAL" ]; then
-    src="$TCP_SCRIPT_LOCAL"
+  if [ -s "$TCP_CORE_LIB_LOCAL" ]; then
+    core="$TCP_CORE_LIB_LOCAL"
   else
-    src="$(download_script "scripts/tcp-one-click-optimize.sh")"
+    if [ -s "$TCP_SCRIPT_LOCAL" ]; then
+      src="$TCP_SCRIPT_LOCAL"
+    else
+      src="$(download_script "scripts/tcp-one-click-optimize.sh")"
+    fi
+    core="$(prepare_tcp_core_lib "$src")"
   fi
-  core="$(prepare_tcp_core_lib "$src")"
   # shellcheck disable=SC1090
   source "$core"
   AUTO_MODE=1

@@ -310,6 +310,8 @@ ARGO_DOMAIN=tunnel.example.com ARGO_AUTH='你的 Argo Token 或 Json' speed --in
 scripts/
   vps-argo-vmess-oneclick.sh      # 主入口脚本
   tcp-one-click-optimize.sh       # TCP 66 独立入口
+  lib/
+    tcp-core.sh                    # Speed Slayer TCP 核心函数库（移除上游 auto main）
   upstream/
     vps-tcp-tune-install-alias.sh # TCP 上游别名安装脚本归档
     net-tcp-tune.sh               # TCP 上游主脚本归档
