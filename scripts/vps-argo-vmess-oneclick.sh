@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="2026.04.28-r4"
+SPEED_SLAYER_VERSION="2026.04.28-r5"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1398,7 +1398,14 @@ check_self_update_hint() {
 update_self() {
   require_root
   mkdir -p "$WORK_DIR"
-  curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o "$INSTALLED_BIN.tmp"
+  local api_url raw_url
+  api_url="https://api.github.com/repos/cshaizhihao/speed-slayer/contents/scripts/vps-argo-vmess-oneclick.sh?ref=main&ts=$(date +%s)"
+  raw_url="${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)"
+  if command -v python3 >/dev/null 2>&1 && curl -fsSL -H 'Accept: application/vnd.github.raw' -H 'Cache-Control: no-cache' "$api_url" -o "$INSTALLED_BIN.tmp"; then
+    :
+  else
+    curl -fsSL -H 'Cache-Control: no-cache' "$raw_url" -o "$INSTALLED_BIN.tmp"
+  fi
   bash -n "$INSTALLED_BIN.tmp"
   mv "$INSTALLED_BIN.tmp" "$INSTALLED_BIN"
   chmod +x "$INSTALLED_BIN"
