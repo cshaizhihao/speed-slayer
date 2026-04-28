@@ -868,23 +868,70 @@ check_environment() {
   fi
 }
 
+field_from_list() {
+  local key="$1"
+  awk -F: -v k="$key" '$1 ~ k {sub(/^[[:space:]]+/,"",$2); print $2; exit}' /etc/argox/list 2>/dev/null
+}
+
+subscription_url() {
+  local name="$1"
+  grep -E "https://.*/${name}$" /etc/argox/list 2>/dev/null | head -1
+}
+
 summarize_result() {
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo " Speed Slayer · 结果摘要"
+  echo " Speed Slayer · Installation Complete"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "内核: $(uname -r)"
-  echo "拥塞控制: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
-  echo "队列算法: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+  printf "%-11s %s\n" "Kernel" "$(uname -r)"
+  printf "%-11s %s\n" "BBR" "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+  printf "%-11s %s\n" "Queue" "$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+
   if [ -s /etc/argox/list ]; then
+    local uuid host path cdn vmess base64 clash shadowrocket auto
+    uuid="$(field_from_list 'UUID')"
+    host="$(field_from_list 'Host/SNI')"
+    path="$(field_from_list 'Path')"
+    cdn="$(field_from_list 'CDN')"
+    vmess="$(grep -m1 '^vmess://' /etc/argox/list 2>/dev/null || true)"
+    base64="$(subscription_url base64)"
+    clash="$(subscription_url clash)"
+    shadowrocket="$(subscription_url shadowrocket)"
+    auto="$(subscription_url auto)"
+
     echo ""
-    echo "Argo VMess+WS 节点/订阅信息已生成："
-    grep -E 'vmess://|https?://.*/(base64|auto|clash|shadowrocket)|trycloudflare\.com|Index:|V2rayN|Nekoray' /etc/argox/list || true
+    echo "Node"
+    printf "%-11s %s\n" "Protocol" "VMess"
+    printf "%-11s %s\n" "Network" "WebSocket"
+    printf "%-11s %s\n" "TLS" "Enabled"
+    printf "%-11s %s\n" "Host/SNI" "$host"
+    printf "%-11s %s\n" "Path" "$path"
+    printf "%-11s %s\n" "UUID" "$uuid"
+    printf "%-11s %s\n" "CDN" "$cdn"
+
+    echo ""
+    echo "VMess URL"
+    echo "$vmess"
+
+    echo ""
+    echo "Subscriptions"
+    [ -n "$base64" ] && printf "%-13s %s\n" "Base64" "$base64"
+    [ -n "$clash" ] && printf "%-13s %s\n" "Clash" "$clash"
+    [ -n "$shadowrocket" ] && printf "%-13s %s\n" "Shadowrocket" "$shadowrocket"
+    [ -n "$auto" ] && printf "%-13s %s\n" "Auto" "$auto"
+
+    echo ""
+    echo "Commands"
+    echo "speed --doctor     # 全链路诊断"
+    echo "speed --logs       # 查看日志"
+    echo "speed --repair     # 清理并重装节点"
     echo ""
     echo "完整信息：/etc/argox/list"
   else
     echo ""
-    echo "未检测到 /etc/argox/list；如果刚完成 TCP 内核安装并重启，请重启后执行 --install-argo-vmess。"
+    echo "未检测到节点信息。"
+    echo "如果刚完成内核安装，请重启后执行：speed"
+    echo "如果需要单独部署节点，请执行：speed --install-argo-vmess"
   fi
 }
 
@@ -1004,7 +1051,7 @@ update_self() {
 show_roadmap() {
   section "Speed Slayer · Roadmap"
   cat <<'EOF'
-当前进度：约 82%
+当前进度：约 86%
 
 已完成：
 - 一键完整流程与重启续跑
@@ -1027,8 +1074,8 @@ show_roadmap() {
 4. README / CHANGELOG / 发布版本收口
 
 预计剩余：
-- 可用 Beta：约 1 轮施工
-- 接近 V1.0：约 4-5 轮施工
+- 可用 Beta：已接近，可进入实机回归
+- 接近 V1.0：约 3-4 轮施工
 EOF
 }
 

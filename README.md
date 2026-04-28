@@ -150,6 +150,29 @@ bash scripts/vps-argo-vmess-oneclick.sh --doctor
 
 ---
 
+## 安装完成结果页
+
+安装完成后会输出复制友好的结果页：
+
+```text
+Speed Slayer · Installation Complete
+Protocol    VMess
+Network     WebSocket
+TLS         Enabled
+Host/SNI    xxx.trycloudflare.com
+Path        /xxx-vm
+UUID        xxxxxxxx
+
+VMess URL
+vmess://...
+
+Subscriptions
+Base64       https://xxx/base64
+Clash        https://xxx/clash
+Shadowrocket https://xxx/shadowrocket
+Auto         https://xxx/auto
+```
+
 ## 修复与日志
 
 ```bash
@@ -449,10 +472,10 @@ bash <(curl -fsSL "https://raw.githubusercontent.com/Eric86777/vps-tcp-tune/main
 
 ## 当前施工进度
 
-当前进度约 **82%**。
+当前进度约 **86%**。
 
-- 可用 Beta：约 1 轮施工
-- 接近 V1.0：约 4-5 轮施工
+- 可用 Beta：已接近，可进入实机回归
+- 接近 V1.0：约 3-4 轮施工
 
 后续每轮推送固定汇报：
 
