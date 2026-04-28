@@ -397,12 +397,64 @@ detect_memory_mb() {
   free -m 2>/dev/null | awk '/^Mem:/ {print $2+0}'
 }
 
+install_speedtest_cli() {
+  command -v speedtest >/dev/null 2>&1 && return 0
+  local arch url tmp
+  case "$(uname -m)" in
+    x86_64|amd64) arch="x86_64" ;;
+    aarch64|arm64) arch="aarch64" ;;
+    *) return 1 ;;
+  esac
+  url="https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-${arch}.tgz"
+  tmp="$(mktemp -d)"
+  if curl -LfsS "$url" -o "$tmp/speedtest.tgz" 2>/dev/null || wget -q "$url" -O "$tmp/speedtest.tgz" 2>/dev/null; then
+    tar -xzf "$tmp/speedtest.tgz" -C "$tmp" >/dev/null 2>&1 || { rm -rf "$tmp"; return 1; }
+    [ -x "$tmp/speedtest" ] || { rm -rf "$tmp"; return 1; }
+    mv "$tmp/speedtest" /usr/local/bin/speedtest
+    chmod +x /usr/local/bin/speedtest
+    rm -rf "$tmp"
+    return 0
+  fi
+  rm -rf "$tmp"
+  return 1
+}
+
+speedtest_bandwidth_mbps() {
+  install_speedtest_cli || return 1
+  local out mbps
+  out="$(timeout 90 speedtest --accept-license --accept-gdpr 2>&1 || true)"
+  echo "$out" > "$WORK_DIR/speedtest.log"
+  mbps="$(printf '%s\n' "$out" | awk '/Upload:/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+(\.[0-9]+)?$/){print int($i); exit}}')"
+  [ -n "$mbps" ] && [ "$mbps" -gt 0 ] 2>/dev/null || return 1
+  echo "$mbps"
+}
+
+run_speedtest_cmd() {
+  require_root
+  section "Speed Slayer · Speedtest"
+  mkdir -p "$WORK_DIR"
+  info "正在测速，结果用于评估上行带宽；失败不会影响安装。"
+  if ! install_speedtest_cli; then
+    err "speedtest CLI 安装失败。"
+    echo "日志：$WORK_DIR/speedtest.log"
+    return 1
+  fi
+  speedtest --accept-license --accept-gdpr | tee "$WORK_DIR/speedtest.log"
+}
+
 detect_bandwidth_mbps() {
   if [ -n "${SPEED_BANDWIDTH_MBPS:-}" ] && echo "$SPEED_BANDWIDTH_MBPS" | grep -Eq '^[0-9]+$'; then
     echo "$SPEED_BANDWIDTH_MBPS"
     return 0
   fi
-  # 安装流程不默认跑 Ookla，避免许可证/下载/测速卡住；无显式指定时使用稳妥默认值。
+  if [ "${SPEED_AUTO_SPEEDTEST:-1}" = "1" ]; then
+    local measured
+    if measured="$(speedtest_bandwidth_mbps 2>/dev/null)"; then
+      echo "$measured"
+      return 0
+    fi
+    warn "测速未成功，使用默认带宽 1000Mbps；可用 SPEED_BANDWIDTH_MBPS 手动指定。"
+  fi
   echo "1000"
 }
 
@@ -1258,7 +1310,7 @@ update_self() {
 show_roadmap() {
   section "Speed Slayer · Roadmap"
   cat <<'EOF'
-当前进度：约 94%
+当前进度：约 96%
 
 已完成：
 - 一键完整流程与重启续跑
@@ -1282,7 +1334,7 @@ show_roadmap() {
 
 预计剩余：
 - 可用 Beta：已接近，可进入实机回归
-- 接近 V1.0：约 2 轮施工
+- 接近 V1.0：约 1-2 轮施工
 EOF
 }
 
@@ -1417,6 +1469,7 @@ Commands:
   --logs [type]          查看日志：install/kernel/tcp/argo/xray
   --repair               清理残留并重装 Argo VMess+WS
   --roadmap              查看项目进度与下一步计划
+  --speedtest            执行 Ookla Speedtest 测速
   --update-self          更新 /usr/local/bin/speed 到 GitHub 最新版本
   --version              显示当前 Speed Slayer 版本
   -h, --help             显示帮助
@@ -1487,6 +1540,7 @@ menu_section_diag() {
 3. 结果摘要
 4. 健康检查
 5. 查看日志
+6. Speedtest 测速
 0. 返回主页
 EOF
   read -r -p "请选择: " choice
@@ -1496,6 +1550,7 @@ EOF
     3) summarize_result ;;
     4) health_check ;;
     5) show_logs ;;
+    6) run_speedtest_cmd ;;
     0) menu_body ;;
     *) err "无效选择"; return 1 ;;
   esac
@@ -1586,6 +1641,7 @@ case "${1:-}" in
   --logs) show_logs "${2:-menu}" ;;
   --repair) repair_install ;;
   --roadmap) show_roadmap ;;
+  --speedtest) run_speedtest_cmd ;;
   --update-self) update_self ;;
   --version) echo "Speed Slayer ${SPEED_SLAYER_VERSION}" ;;
   -h|--help) usage ;;
