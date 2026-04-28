@@ -69,6 +69,20 @@ speed
 
 ---
 
+## 旧版 speed 更新
+
+如果你已经安装过 `/usr/local/bin/speed`，建议先更新：
+
+```bash
+speed --update-self
+```
+
+如果旧版 `speed` 本身有 bug，可强制覆盖：
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o /usr/local/bin/speed && chmod +x /usr/local/bin/speed
+```
+
 ## 推荐使用流程
 
 ### 1. 首次运行
@@ -120,6 +134,7 @@ speed --health               # 安装后健康检查
 speed --doctor               # 一键诊断：环境检测 + 结果摘要 + 健康检查
 speed --install-shortcut     # 安装 speed 快捷命令
 speed --update-self          # 更新 speed 自身
+speed --version              # 查看当前版本
 speed --clear-state          # 清理续跑状态
 speed --clean-argo           # 清理旧 Argo 残留，备份后重装纯 VMess+WS
 speed --uninstall-argo       # 卸载 Argo VMess + WS

@@ -7,6 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
+SPEED_SLAYER_VERSION="2026.04.28-r1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
 
@@ -56,7 +57,7 @@ EOF
 intro() {
   printf "%b%s%b\n" "$C_CYAN" "  Speed Slayer 是一个 VPS 网络加速与 Argo 隧道一键脚本。" "$C_RESET"
   printf "%b%s%b\n" "$C_WHITE" "  功能：BBR v3 / XanMod 网络调优 + 原生 Cloudflare Argo VMess WebSocket 节点生成。" "$C_RESET"
-  printf "%b%s%b\n" "$C_DIM" "  Author: NodeSeek @cshaizhihao" "$C_RESET"
+  printf "%b%s%b\n" "$C_DIM" "  Version: ${SPEED_SLAYER_VERSION} | Author: NodeSeek @cshaizhihao" "$C_RESET"
   echo ""
 }
 
@@ -120,9 +121,13 @@ install_shortcut() {
     dst_path="$(readlink -f "$INSTALLED_BIN" 2>/dev/null || echo "$INSTALLED_BIN")"
     if [ "$src_path" != "$dst_path" ]; then
       cp "${BASH_SOURCE[0]}" "$INSTALLED_BIN"
+    else
+      curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o "$INSTALLED_BIN.tmp"
+      bash -n "$INSTALLED_BIN.tmp"
+      mv "$INSTALLED_BIN.tmp" "$INSTALLED_BIN"
     fi
   else
-    curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh" -o "$INSTALLED_BIN"
+    curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o "$INSTALLED_BIN"
   fi
   chmod +x "$INSTALLED_BIN"
   success "已安装快捷命令：speed"
@@ -935,14 +940,34 @@ health_check() {
   return 1
 }
 
+remote_version() {
+  local tmp
+  tmp="$(mktemp /tmp/speed-slayer-version.XXXXXX)"
+  if curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o "$tmp" 2>/dev/null; then
+    grep -m1 '^SPEED_SLAYER_VERSION=' "$tmp" | cut -d= -f2- | tr -d '"'
+  fi
+  rm -f "$tmp"
+}
+
+check_self_update_hint() {
+  [ "${SKIP_UPDATE_CHECK:-0}" = "1" ] && return 0
+  [ -t 1 ] || return 0
+  local rv
+  rv="$(remote_version || true)"
+  if [ -n "$rv" ] && [ "$rv" != "$SPEED_SLAYER_VERSION" ]; then
+    warn "检测到新版本：${rv}（当前：${SPEED_SLAYER_VERSION}）。建议先执行：speed --update-self"
+  fi
+}
+
 update_self() {
   require_root
   mkdir -p "$WORK_DIR"
-  curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh" -o "$INSTALLED_BIN.tmp"
+  curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o "$INSTALLED_BIN.tmp"
   bash -n "$INSTALLED_BIN.tmp"
   mv "$INSTALLED_BIN.tmp" "$INSTALLED_BIN"
   chmod +x "$INSTALLED_BIN"
   success "speed 已更新到最新版本：$INSTALLED_BIN"
+  "$INSTALLED_BIN" --version || true
 }
 
 doctor() {
@@ -977,6 +1002,7 @@ Commands:
   --health               安装后健康检查
   --doctor               一键诊断：环境检测 + 结果摘要 + 健康检查
   --update-self          更新 /usr/local/bin/speed 到 GitHub 最新版本
+  --version              显示当前 Speed Slayer 版本
   -h, --help             显示帮助
 
 Optional environment variables:
@@ -1050,6 +1076,7 @@ menu() {
 
 default_action() {
   render_header_once
+  check_self_update_hint
   require_root
   if [ -s "$STATE_FILE" ]; then
     info "检测到续跑状态，自动继续完整流程。"
@@ -1077,6 +1104,7 @@ case "${1:-}" in
   --health) health_check ;;
   --doctor) doctor ;;
   --update-self) update_self ;;
+  --version) echo "Speed Slayer ${SPEED_SLAYER_VERSION}" ;;
   -h|--help) usage ;;
   "") default_action ;;
   *) err "未知参数：$1"; usage; exit 1 ;;
