@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# VPS TCP Optimize + Argo VMess WebSocket OneClick
+# Speed Slayer
 # V1 strategy:
 # - TCP optimize: call the isolated menu-66 entry preserved from vps-tcp-tune.
 # - Argo VMess+WS: call the archived ArgoX script in non-interactive config mode,
 #   forcing INSTALL_PROTOCOLS=(f), i.e. VMess + WS only.
 
-REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/vps-tcp-argo-toolkit/main"
+REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
 
@@ -230,7 +230,7 @@ continue_after_reboot() {
 check_environment() {
   require_root
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo " Speed Argo TCP · 环境检测"
+  echo " Speed Slayer · 环境检测"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "系统内核: $(uname -r)"
   echo "系统架构: $(uname -m)"
@@ -254,7 +254,7 @@ check_environment() {
 summarize_result() {
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo " Speed Argo TCP · 结果摘要"
+  echo " Speed Slayer · 结果摘要"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "内核: $(uname -r)"
   echo "拥塞控制: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
@@ -302,7 +302,7 @@ port_state() {
 health_check() {
   require_root
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo " Speed Argo TCP · 健康检查"
+  echo " Speed Slayer · 健康检查"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
   local fail=0
@@ -372,7 +372,7 @@ doctor() {
 
 usage() {
   cat <<'EOF'
-VPS TCP Optimize + Argo VMess+WS OneClick
+Speed Slayer
 
 Usage:
   bash vps-argo-vmess-oneclick.sh [command]
@@ -415,7 +415,7 @@ EOF
 menu() {
   cat <<'EOF'
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- VPS TCP Optimize + Argo VMess+WS
+ Speed Slayer
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. 执行全自动 TCP 优化（BBR v3 + 网络调优）
 2. 安装/重装 Argo VMess + WS
