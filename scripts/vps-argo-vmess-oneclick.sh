@@ -1131,53 +1131,111 @@ Examples:
 EOF
 }
 
+menu_section_node() {
+  section "Speed Slayer · 节点管理"
+  cat <<'EOF'
+1. 安装/重装 Argo VMess+WS
+2. 查看节点/订阅信息
+3. 修复 Argo 安装
+4. 卸载 Argo VMess+WS
+5. 清理 Argo 配置
+0. 返回主页
+EOF
+  read -r -p "请选择: " choice
+  case "$choice" in
+    1) install_argo_vmess_ws ;;
+    2) show_argo_vmess_ws_info ;;
+    3) repair_install ;;
+    4) uninstall_argo_vmess_ws ;;
+    5) clean_argo_state ;;
+    0) menu_body ;;
+    *) err "无效选择"; return 1 ;;
+  esac
+}
+
+menu_section_tcp() {
+  section "Speed Slayer · TCP 加速"
+  cat <<'EOF'
+1. 查看 TCP / BBR / 内核状态
+2. 执行 TCP 优化
+3. 重启后继续安装
+0. 返回主页
+EOF
+  read -r -p "请选择: " choice
+  case "$choice" in
+    1) tcp_status_panel ;;
+    2) run_tcp_optimize ;;
+    3) continue_after_reboot ;;
+    0) menu_body ;;
+    *) err "无效选择"; return 1 ;;
+  esac
+}
+
+menu_section_diag() {
+  section "Speed Slayer · 诊断与日志"
+  cat <<'EOF'
+1. 一键诊断 doctor
+2. 环境检测
+3. 结果摘要
+4. 健康检查
+5. 查看日志
+0. 返回主页
+EOF
+  read -r -p "请选择: " choice
+  case "$choice" in
+    1) doctor ;;
+    2) check_environment ;;
+    3) summarize_result ;;
+    4) health_check ;;
+    5) show_logs ;;
+    0) menu_body ;;
+    *) err "无效选择"; return 1 ;;
+  esac
+}
+
+menu_section_system() {
+  section "Speed Slayer · 更新与项目"
+  cat <<'EOF'
+1. 安装 speed 快捷命令
+2. 更新 speed 自身
+3. 项目进度 Roadmap
+0. 返回主页
+EOF
+  read -r -p "请选择: " choice
+  case "$choice" in
+    1) install_shortcut ;;
+    2) update_self ;;
+    3) show_roadmap ;;
+    0) menu_body ;;
+    *) err "无效选择"; return 1 ;;
+  esac
+}
+
 menu_body() {
   cat <<'EOF'
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Speed Slayer · 主页
+ Speed Slayer · 控制台
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 介绍：BBR v3 网络优化 + Argo VMess WebSocket 节点生成
 署名：NodeSeek @cshaizhihao
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 一键执行完整流程（TCP 优化 + Argo VMess + WS）
-2. 查看 TCP / BBR / 内核状态
-3. 执行 TCP 优化（进入前需 Y/N 确认，默认 Y）
-4. 安装/重装 Argo VMess + WS
-5. 查看节点/订阅信息
-6. 卸载 Argo VMess + WS
-7. 清理 Argo 配置
-8. 安装 speed 快捷命令
-9. 重启后继续安装
-10. 环境检测
-11. 结果摘要
-12. 健康检查
-13. 一键诊断 doctor
-14. 查看日志
-15. 修复 Argo 安装
-16. 项目进度 Roadmap
-17. 更新 speed 自身
+1. 一键执行完整流程
+2. 节点管理
+3. TCP 加速
+4. 诊断与日志
+5. 修复与清理
+6. 更新与项目进度
 0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
   read -r -p "请输入选择: " choice
   case "$choice" in
     1) force_all ;;
-    2) tcp_status_panel ;;
-    3) run_tcp_optimize ;;
-    4) install_argo_vmess_ws ;;
-    5) show_argo_vmess_ws_info ;;
-    6) uninstall_argo_vmess_ws ;;
-    7) clean_argo_state ;;
-    8) install_shortcut ;;
-    9) continue_after_reboot ;;
-    10) check_environment ;;
-    11) summarize_result ;;
-    12) health_check ;;
-    13) doctor ;;
-    14) show_logs ;;
-    15) repair_install ;;
-    16) show_roadmap ;;
-    17) update_self ;;
+    2) menu_section_node ;;
+    3) menu_section_tcp ;;
+    4) menu_section_diag ;;
+    5) repair_install ;;
+    6) menu_section_system ;;
     0) exit 0 ;;
     *) err "无效选择"; exit 1 ;;
   esac
