@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="2026.04.28-r5"
+SPEED_SLAYER_VERSION="2026.04.28-r6"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -56,10 +56,12 @@ EOF
 }
 
 intro() {
+  echo ""
   printf "%b%s%b\n" "$C_BOLD$C_CYAN" "  『"
   printf "%b%*s%b\n" "$C_WHITE" 56 "VPS 网络加速 · Argo 隧道 · VMess WebSocket" "$C_RESET"
   printf "%b%*s%b\n" "$C_WHITE" 49 "斩断延迟，撕开隧道，释放节点。" "$C_RESET"
   printf "%b%64s%b\n" "$C_BOLD$C_CYAN" "』" "$C_RESET"
+  echo ""
   printf "  %b入口：%b输入 %bspeed%b 进入控制台；重启后输入 %bspeed%b 自动续跑。\n" "$C_YELLOW" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
   printf "  %bGitHub:%b %s  %bVersion:%b %s  %bAuthor:%b NodeSeek @cshaizhihao\n" "$C_CYAN" "$C_RESET" "$PROJECT_URL" "$C_CYAN" "$C_RESET" "$SPEED_SLAYER_VERSION" "$C_CYAN" "$C_RESET"
   echo ""
@@ -1377,12 +1379,23 @@ health_check() {
 }
 
 remote_version() {
-  local tmp
+  local tmp api_url
   tmp="$(mktemp /tmp/speed-slayer-version.XXXXXX)"
-  if curl -fsSL "${REPO_RAW_BASE}/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o "$tmp" 2>/dev/null; then
+  api_url="https://api.github.com/repos/cshaizhihao/speed-slayer/contents/scripts/vps-argo-vmess-oneclick.sh?ref=main&ts=$(date +%s)"
+  if curl -fsSL -H 'Accept: application/vnd.github.raw' -H 'Cache-Control: no-cache' "$api_url" -o "$tmp" 2>/dev/null; then
     grep -m1 '^SPEED_SLAYER_VERSION=' "$tmp" | cut -d= -f2- | tr -d '"'
   fi
   rm -f "$tmp"
+}
+
+version_rank() {
+  printf '%s\n' "$1" | sed -nE 's/^([0-9]{4})\.([0-9]{2})\.([0-9]{2})-r([0-9]+)$/\1\2\3\4/p'
+}
+
+is_newer_version() {
+  local remote="$1" current="$2" rr cr
+  rr="$(version_rank "$remote")"; cr="$(version_rank "$current")"
+  [ -n "$rr" ] && [ -n "$cr" ] && [ "$rr" -gt "$cr" ]
 }
 
 check_self_update_hint() {
@@ -1390,7 +1403,7 @@ check_self_update_hint() {
   [ -t 1 ] || return 0
   local rv
   rv="$(remote_version || true)"
-  if [ -n "$rv" ] && [ "$rv" != "$SPEED_SLAYER_VERSION" ]; then
+  if [ -n "$rv" ] && is_newer_version "$rv" "$SPEED_SLAYER_VERSION"; then
     warn "检测到新版本：${rv}（当前：${SPEED_SLAYER_VERSION}）。建议先执行：speed --update-self"
   fi
 }
