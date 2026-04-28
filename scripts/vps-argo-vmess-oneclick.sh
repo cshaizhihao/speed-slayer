@@ -57,7 +57,7 @@ EOF
 }
 
 intro() {
-  printf "%b%s%b\n" "$C_CYAN" "  一键完成网络加速、Argo 隧道与 VMess WebSocket 节点部署；重启后可自动接着跑。" "$C_RESET"
+  printf "%b%s%b\n" "$C_BOLD$C_CYAN" "  Accelerate the network. Forge the tunnel. Ship the node." "$C_RESET"
   printf "  入口：直接输入 %bspeed%b 进入控制台；重启后也输入 %bspeed%b 自动续跑。\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
   printf "  %bGitHub:%b %b%s%b  %bVersion:%b %b%s%b  %bAuthor:%b %bNodeSeek @cshaizhihao%b\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_UNDERLINE$C_WHITE" "$PROJECT_URL" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "$SPEED_SLAYER_VERSION" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET" "$C_YELLOW" "$C_RESET"
   echo ""
