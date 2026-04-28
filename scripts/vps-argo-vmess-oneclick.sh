@@ -207,7 +207,91 @@ tcp_plan_panel() {
   fi
 }
 
+detect_x64_level() {
+  local flags level="1"
+  flags="$(grep -m1 '^flags' /proc/cpuinfo 2>/dev/null || true)"
+  if echo "$flags" | grep -qw 'avx512f'; then level="4"
+  elif echo "$flags" | grep -qw 'avx2'; then level="3"
+  elif echo "$flags" | grep -qw 'sse4_2'; then level="2"
+  fi
+  echo "$level"
+}
+
+native_install_xanmod_kernel() {
+  section "Speed Slayer 原生 XanMod / BBR v3 内核安装"
+  if [ "$(uname -m)" != "x86_64" ]; then
+    warn "原生内核安装当前只覆盖 x86_64；将回退 legacy 上游安装器。"
+    return 2
+  fi
+  if [ ! -r /etc/os-release ]; then
+    err "无法识别系统：缺少 /etc/os-release"
+    return 2
+  fi
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  if [ "${ID:-}" != "debian" ] && [ "${ID:-}" != "ubuntu" ]; then
+    warn "原生 XanMod 安装当前只覆盖 Debian/Ubuntu；将回退 legacy 上游安装器。"
+    return 2
+  fi
+
+  progress_step 10 "安装依赖：wget / gnupg / ca-certificates"
+  apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
+  apt-get install -y wget gnupg ca-certificates >>"$WORK_DIR/kernel-install.log" 2>&1
+
+  progress_step 25 "导入 XanMod GPG key"
+  local keyring="/usr/share/keyrings/xanmod-archive-keyring.gpg"
+  local key_tmp
+  key_tmp="$(mktemp)"
+  if ! wget -qO "$key_tmp" "https://dl.xanmod.org/archive.key" >>"$WORK_DIR/kernel-install.log" 2>&1; then
+    err "XanMod GPG key 下载失败"
+    rm -f "$key_tmp"
+    return 1
+  fi
+  gpg --dearmor -o "$keyring" --yes < "$key_tmp" >>"$WORK_DIR/kernel-install.log" 2>&1
+  rm -f "$key_tmp"
+
+  progress_step 40 "写入临时 XanMod APT 源"
+  local repo_file="/etc/apt/sources.list.d/xanmod-release.list"
+  echo "deb [signed-by=${keyring}] https://deb.xanmod.org releases main" > "$repo_file"
+
+  progress_step 55 "检测 CPU x86-64-v 等级"
+  local level pkg
+  level="$(detect_x64_level)"
+  pkg="linux-xanmod-x64v${level}"
+  info "将安装内核包：${pkg}"
+
+  progress_step 70 "安装 XanMod 内核包"
+  apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
+  apt-get install -y "$pkg" >>"$WORK_DIR/kernel-install.log" 2>&1
+
+  progress_step 88 "验证内核包安装"
+  if ! dpkg -l 2>/dev/null | grep -qE "^ii\\s+${pkg}"; then
+    err "内核包安装验证失败：${pkg}"
+    return 1
+  fi
+
+  progress_step 95 "清理临时 XanMod APT 源"
+  rm -f "$repo_file"
+  apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
+
+  progress_step 100 "XanMod 安装完成，重启后执行 speed 继续"
+  return 0
+}
+
 run_tcp_backend_visible() {
+  mkdir -p "$WORK_DIR"
+  if [ "${SPEED_KERNEL_MODE:-native}" = "native" ]; then
+    set +e
+    native_install_xanmod_kernel
+    local code=$?
+    set -e
+    if [ "$code" -eq 0 ]; then
+      return 0
+    elif [ "$code" -ne 2 ]; then
+      return "$code"
+    fi
+  fi
+  warn "使用 legacy 上游内核安装器。"
   fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
 }
 
