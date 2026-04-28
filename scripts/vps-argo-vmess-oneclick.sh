@@ -478,20 +478,32 @@ run_speedtest_cmd() {
   speedtest --accept-license --accept-gdpr | tee "$WORK_DIR/speedtest.log"
 }
 
-detect_bandwidth_mbps() {
+detect_bandwidth_profile() {
+  BANDWIDTH_MBPS=""
+  BANDWIDTH_SOURCE="default"
+  BANDWIDTH_NOTE=""
   if [ -n "${SPEED_BANDWIDTH_MBPS:-}" ] && echo "$SPEED_BANDWIDTH_MBPS" | grep -Eq '^[0-9]+$'; then
-    echo "$SPEED_BANDWIDTH_MBPS"
+    BANDWIDTH_MBPS="$SPEED_BANDWIDTH_MBPS"
+    BANDWIDTH_SOURCE="manual"
+    BANDWIDTH_NOTE="由 SPEED_BANDWIDTH_MBPS 指定"
     return 0
   fi
   if [ "${SPEED_AUTO_SPEEDTEST:-1}" = "1" ]; then
+    progress_step 18 "正在执行 Speedtest 带宽探测"
     local measured
-    if measured="$(speedtest_bandwidth_mbps 2>/dev/null)"; then
-      echo "$measured"
+    if measured="$(speedtest_bandwidth_mbps 2>/dev/null)" && [ -n "$measured" ]; then
+      BANDWIDTH_MBPS="$measured"
+      BANDWIDTH_SOURCE="measured"
+      BANDWIDTH_NOTE="Ookla Speedtest Upload 实测"
       return 0
     fi
-    warn "测速未成功，使用默认带宽 1000Mbps；可用 SPEED_BANDWIDTH_MBPS 手动指定。"
+    BANDWIDTH_NOTE="Speedtest 未成功，已回退默认值；日志：$WORK_DIR/speedtest.log"
+  else
+    BANDWIDTH_NOTE="已关闭自动测速 SPEED_AUTO_SPEEDTEST=0"
   fi
-  echo "1000"
+  BANDWIDTH_MBPS="1000"
+  BANDWIDTH_SOURCE="default"
+  return 0
 }
 
 calculate_tcp_buffer_mb() {
@@ -552,11 +564,13 @@ native_speed_tcp_tune() {
 
   progress_step 20 "[步骤 2/6] 检测服务器带宽并计算最优缓冲区"
   local bandwidth buffer_mb buffer_bytes region
-  bandwidth="$(detect_bandwidth_mbps)"
+  detect_bandwidth_profile
+  bandwidth="$BANDWIDTH_MBPS"
   region="${SPEED_REGION:-global}"
   buffer_mb="$(calculate_tcp_buffer_mb "$bandwidth" "$mem_mb")"
   buffer_bytes=$((buffer_mb * 1024 * 1024))
-  echo "Bandwidth=${bandwidth}Mbps Region=${region} Buffer=${buffer_mb}MB"
+  echo "Bandwidth=${bandwidth}Mbps Source=${BANDWIDTH_SOURCE} Region=${region} Buffer=${buffer_mb}MB"
+  [ -n "$BANDWIDTH_NOTE" ] && echo "BandwidthNote=${BANDWIDTH_NOTE}"
 
   progress_step 34 "[步骤 3/6] 清理配置冲突"
   clean_tcp_conflicts
