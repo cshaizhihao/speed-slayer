@@ -206,6 +206,21 @@ tcp_plan_panel() {
   fi
 }
 
+run_tcp_backend_visible() {
+  fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
+}
+
+run_tcp_backend_silent() {
+  local ipv6_choice="$1"
+  if [ -s "$TCP_SCRIPT_LOCAL" ]; then
+    printf '%s\n' "$ipv6_choice" | bash "$TCP_SCRIPT_LOCAL"
+  else
+    local tmp_script
+    tmp_script="$(download_script "scripts/tcp-one-click-optimize.sh")"
+    printf '%s\n' "$ipv6_choice" | bash "$tmp_script"
+  fi
+}
+
 run_tcp_optimize() {
   require_root
   banner
@@ -218,16 +233,31 @@ run_tcp_optimize() {
     return 0
   fi
   install_shortcut || true
+
   if ! is_xanmod_kernel; then
     save_pending_state
-  fi
-  section "执行 TCP 核心优化"
-  warn "当前版本采用 Speed Slayer 施工面板 + 上游 66 核心后端。关键交互保持可见，避免吞掉内核安装/重启提示。"
-  fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
-  tcp_status_panel || true
-  if ! is_xanmod_kernel; then
+    section "安装 XanMod + BBR v3 内核"
+    warn "当前不是 XanMod 内核。此阶段保留核心输出，避免隐藏安装失败或重启提示。"
+    run_tcp_backend_visible
     show_continue_hint
+    return 0
   fi
+
+  local ipv6_choice="Y"
+  if [ "${ASSUME_Y:-0}" != "1" ]; then
+    printf "%b?%b TCP 调优最后是否永久禁用 IPv6？默认回车 = Y %b[Y/n]%b " "$C_YELLOW" "$C_RESET" "$C_GREEN" "$C_RESET"
+    read -r ipv6_choice || ipv6_choice=""
+    ipv6_choice="${ipv6_choice:-Y}"
+  fi
+
+  section "执行 TCP 网络调优"
+  progress_step 15 "BBR v3 / FQ / TCP buffer 参数"
+  progress_step 35 "DNS 净化与网络稳定性修复"
+  progress_step 55 "Realm 首连超时修复"
+  progress_step 75 "IPv6 策略：${ipv6_choice}"
+  run_with_progress "Speed Slayer TCP 网络调优" "$WORK_DIR/tcp-optimize.log" run_tcp_backend_silent "$ipv6_choice"
+  progress_step 100 "TCP 调优完成"
+  tcp_status_panel || true
 }
 
 gen_uuid() {
