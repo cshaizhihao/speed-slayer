@@ -60,6 +60,15 @@ intro() {
   echo ""
 }
 
+render_header_once() {
+  if [ "${SPEED_HEADER_RENDERED:-0}" = "1" ]; then
+    return 0
+  fi
+  SPEED_HEADER_RENDERED=1
+  banner
+  intro
+}
+
 require_root() {
   if [ "$(id -u)" != "0" ]; then
     err "请使用 root 执行：sudo -i 后重新运行"
@@ -409,8 +418,7 @@ run_tcp_backend_silent() {
 
 run_tcp_optimize() {
   require_root
-  banner
-  intro
+  render_header_once
   tcp_status_panel
   tcp_plan_panel
   warn "TCP 阶段会修改内核 / sysctl / DNS / IPv6 等系统网络配置，且可能要求重启。"
@@ -437,6 +445,7 @@ run_tcp_optimize() {
   fi
 
   section "执行 TCP 网络调优"
+  info "默认使用 Speed Slayer 原生 TCP Profile，不会出现‘选择服务器主要服务地区’这类上游交互。"
   progress_step 15 "BBR v3 / FQ / TCP buffer 参数"
   progress_step 35 "DNS 净化与网络稳定性修复"
   progress_step 55 "Realm 首连超时修复"
@@ -717,7 +726,7 @@ verify_vmess_only() {
 extract_vmess_only() { [ -s /etc/argox/list ] && cat /etc/argox/list || warn "尚未生成 /etc/argox/list"; }
 
 install_argo_vmess_ws() {
-  banner
+  render_header_once
   require_root
   clean_argo_state >/dev/null 2>&1 || true
   write_argox_vmess_config
@@ -736,7 +745,7 @@ show_argo_vmess_ws_info() {
 }
 
 uninstall_argo_vmess_ws() {
-  banner
+  render_header_once
   require_root
   warn "卸载 Speed Slayer 原生 Argo VMess+WS 服务"
   systemctl stop argo xray >/dev/null 2>&1 || true
@@ -760,14 +769,12 @@ clean_argo_state() {
 }
 
 force_all() {
-  banner
-  intro
+  render_header_once
   ASSUME_Y=1
   install_shortcut || true
   if ! is_xanmod_kernel; then
     save_pending_state
     run_tcp_optimize
-    show_continue_hint
     return 0
   fi
   run_tcp_optimize
@@ -776,13 +783,13 @@ force_all() {
 }
 
 run_all() {
-  banner
-  intro
+  render_header_once
   warn "--all 是安全主页模式：不会自动执行 BBR；请选择菜单项后再确认。"
   menu_body
 }
 
 continue_after_reboot() {
+  render_header_once
   require_root
   install_shortcut || true
   if ! is_xanmod_kernel; then
@@ -993,10 +1000,10 @@ menu_body() {
 介绍：BBR v3 / XanMod 网络调优 + 原生 Argo VMess WebSocket 节点生成
 署名：NodeSeek @cshaizhihao
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 查看 TCP / BBR / 内核状态
-2. 执行 TCP 优化（进入前需 Y/N 确认，默认 Y）
-3. 安装/重装 Argo VMess + WS
-4. 一键执行完整流程（TCP 优化 + Argo VMess + WS）
+1. 一键执行完整流程（TCP 优化 + Argo VMess + WS）
+2. 查看 TCP / BBR / 内核状态
+3. 执行 TCP 优化（进入前需 Y/N 确认，默认 Y）
+4. 安装/重装 Argo VMess + WS
 5. 查看节点/订阅信息
 6. 卸载 Argo VMess + WS
 7. 清理旧 Argo 残留
@@ -1012,10 +1019,10 @@ menu_body() {
 EOF
   read -r -p "请输入选择: " choice
   case "$choice" in
-    1) tcp_status_panel ;;
-    2) run_tcp_optimize ;;
-    3) install_argo_vmess_ws ;;
-    4) force_all ;;
+    1) force_all ;;
+    2) tcp_status_panel ;;
+    3) run_tcp_optimize ;;
+    4) install_argo_vmess_ws ;;
     5) show_argo_vmess_ws_info ;;
     6) uninstall_argo_vmess_ws ;;
     7) clean_argo_state ;;
@@ -1032,14 +1039,12 @@ EOF
 }
 
 menu() {
-  banner
-  intro
+  render_header_once
   menu_body
 }
 
 default_action() {
-  banner
-  intro
+  render_header_once
   require_root
   if [ -s "$STATE_FILE" ]; then
     info "检测到续跑状态，自动继续完整流程。"
