@@ -52,11 +52,30 @@ EOF
   printf "%b%s%b\n" "$C_DIM" "        Native BBR v3 + Argo VMess WebSocket one-click accelerator" "$C_RESET"
 }
 
+intro() {
+  printf "%b%s%b\n" "$C_CYAN" "  Speed Slayer 是一个 VPS 网络加速与 Argo 隧道一键脚本。" "$C_RESET"
+  printf "%b%s%b\n" "$C_WHITE" "  功能：BBR v3 / XanMod 网络调优 + 原生 Cloudflare Argo VMess WebSocket 节点生成。" "$C_RESET"
+  printf "%b%s%b\n" "$C_DIM" "  Author: NodeSeek @cshaizhihao" "$C_RESET"
+  echo ""
+}
+
 require_root() {
   if [ "$(id -u)" != "0" ]; then
     err "请使用 root 执行：sudo -i 后重新运行"
     exit 1
   fi
+}
+
+confirm_action() {
+  local prompt="$1"
+  local ans
+  if [ "${ASSUME_Y:-0}" = "1" ]; then
+    return 0
+  fi
+  printf "%b?%b %s %b[Y/n]%b " "$C_YELLOW" "$C_RESET" "$prompt" "$C_GREEN" "$C_RESET"
+  read -r ans || ans=""
+  ans="${ans:-Y}"
+  [[ "$ans" =~ ^[Yy]$ ]]
 }
 
 download_script() {
@@ -162,11 +181,18 @@ run_with_progress() {
 
 run_tcp_optimize() {
   require_root
+  section "TCP 优化确认"
+  warn "即将执行 TCP 优化：XanMod / BBR v3 / 网络调优。该步骤可能修改内核、sysctl、DNS、IPv6，并可能要求重启。"
+  if ! confirm_action "是否继续进入 TCP 一键全自动优化？默认回车 = Y"; then
+    warn "已取消 TCP 优化。"
+    return 0
+  fi
   install_shortcut || true
   if ! is_xanmod_kernel; then
     save_pending_state
   fi
   info "启动 TCP 一键全自动优化：XanMod + BBR v3 + 网络调优"
+  warn "当前 TCP 阶段仍使用上游 66 核心逻辑，输出暂保留可见，避免隐藏内核/重启交互提示。下一轮会继续做原生化瘦身。"
   fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
   if ! is_xanmod_kernel; then
     show_continue_hint
@@ -489,6 +515,7 @@ clean_argo_state() {
 force_all() {
   banner
   intro
+  ASSUME_Y=1
   install_shortcut || true
   if ! is_xanmod_kernel; then
     save_pending_state
@@ -504,7 +531,7 @@ force_all() {
 run_all() {
   banner
   intro
-  warn "--all 现在默认进入交互主页，避免首次运行直接执行 BBR/系统修改。"
+  warn "--all 是安全主页模式：不会自动执行 BBR；请选择菜单项后再确认。"
   menu_body
 }
 
@@ -718,7 +745,7 @@ menu_body() {
 介绍：BBR v3 / XanMod 网络调优 + 原生 Argo VMess WebSocket 节点生成
 署名：NodeSeek @cshaizhihao
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 执行 TCP 优化（BBR v3 + 网络调优）
+1. 执行 TCP 优化（进入前需 Y/N 确认，默认 Y）
 2. 安装/重装 Argo VMess + WS
 3. 一键执行完整流程（TCP 优化 + Argo VMess + WS）
 4. 查看节点/订阅信息

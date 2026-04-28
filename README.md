@@ -43,10 +43,10 @@ https://github.com/cshaizhihao/speed-slayer
 ## 一键安装 / 执行完整流程
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main/scripts/vps-argo-vmess-oneclick.sh -o /tmp/speed && bash /tmp/speed --all
+curl -fsSL "https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o /tmp/speed && bash /tmp/speed --all
 ```
 
-首次执行 `--all` 会进入交互主页，不会直接修改系统。若需要无人值守完整流程，可使用 `speed --force-all`。
+首次执行 `--all` 会进入交互主页，不会直接修改系统。选择 TCP 优化时，会先出现 Y/N 确认，默认回车为 Y，然后才进入 BBR/TCP 调优。若需要无人值守完整流程，可使用 `speed --force-all`。
 
 如果 TCP 阶段安装了 XanMod / BBR v3 内核，脚本会提示重启。
 
@@ -74,7 +74,7 @@ speed
 ### 1. 首次运行
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main/scripts/vps-argo-vmess-oneclick.sh -o /tmp/speed && bash /tmp/speed --all
+curl -fsSL "https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main/scripts/vps-argo-vmess-oneclick.sh?$(date +%s)" -o /tmp/speed && bash /tmp/speed --all
 ```
 
 ### 2. 如果提示重启
