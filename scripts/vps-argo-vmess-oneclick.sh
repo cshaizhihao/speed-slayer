@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="2026.04.28-r7"
+SPEED_SLAYER_VERSION="2026.04.28-r8"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -153,10 +153,23 @@ EOF
   chmod 600 "$STATE_FILE"
 }
 
+cdn_recommendation() {
+  echo ""
+  line
+  printf "%b%s%b
+" "$C_BOLD$C_YELLOW" " 推荐下一步：本地优选 Cloudflare CDN" "$C_RESET"
+  printf "  节点已经生成，建议继续在本地运行 %bCloudflareSpeedTest%b，选择延迟更低、速度更稳的 CDN IP。
+" "$C_GREEN" "$C_RESET"
+  printf "  项目地址：%bhttps://github.com/XIU2/CloudflareSpeedTest/releases%b
+" "$C_UNDERLINE$C_CYAN" "$C_RESET"
+  line
+}
+
 clear_state() {
   require_root
   rm -f "$STATE_FILE"
   success "已清理续跑状态：$STATE_FILE"
+  cdn_recommendation
 }
 
 is_xanmod_kernel() {
