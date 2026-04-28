@@ -113,6 +113,7 @@ install_argo_vmess_ws() {
   fi
   success "Argo VMess+WS 安装流程结束"
   show_argo_vmess_ws_info || true
+  summarize_result || true
 }
 
 show_argo_vmess_ws_info() {
@@ -144,6 +145,50 @@ run_all() {
   install_argo_vmess_ws
 }
 
+check_environment() {
+  require_root
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo " Speed Argo TCP · 环境检测"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "系统内核: $(uname -r)"
+  echo "系统架构: $(uname -m)"
+  echo "Root 权限: OK"
+  for cmd in curl wget bash systemctl ss openssl; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      printf "%-12s: OK\n" "$cmd"
+    else
+      printf "%-12s: MISSING\n" "$cmd"
+    fi
+  done
+  echo "TCP 拥塞控制: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+  echo "默认队列算法: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+  if [ -s /etc/argox/list ]; then
+    echo "ArgoX 节点信息: FOUND /etc/argox/list"
+  else
+    echo "ArgoX 节点信息: NOT FOUND"
+  fi
+}
+
+summarize_result() {
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo " Speed Argo TCP · 结果摘要"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "内核: $(uname -r)"
+  echo "拥塞控制: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
+  echo "队列算法: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
+  if [ -s /etc/argox/list ]; then
+    echo ""
+    echo "Argo VMess+WS 节点/订阅信息已生成："
+    grep -E 'vmess://|https?://.*/(base64|auto|clash|shadowrocket)|trycloudflare\.com|Index:|V2rayN|Nekoray' /etc/argox/list || true
+    echo ""
+    echo "完整信息：/etc/argox/list"
+  else
+    echo ""
+    echo "未检测到 /etc/argox/list；如果刚完成 TCP 内核安装并重启，请重启后执行 --install-argo-vmess。"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 VPS TCP Optimize + Argo VMess+WS OneClick
@@ -158,6 +203,8 @@ Commands:
   --show-url             查看已生成的节点/订阅信息
   --uninstall-argo       卸载 Argo VMess + WS 相关服务
   --write-config         仅生成 Argo VMess + WS 配置文件，不安装
+  --check                检测当前环境和已安装状态
+  --summary              输出结果摘要
   -h, --help             显示帮助
 
 Optional environment variables:
@@ -188,6 +235,8 @@ menu() {
 3. 一键执行：TCP 优化 + Argo VMess + WS
 4. 查看节点/订阅信息
 5. 卸载 Argo VMess + WS
+6. 环境检测
+7. 结果摘要
 0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
@@ -198,6 +247,8 @@ EOF
     3) run_all ;;
     4) show_argo_vmess_ws_info ;;
     5) uninstall_argo_vmess_ws ;;
+    6) check_environment ;;
+    7) summarize_result ;;
     0) exit 0 ;;
     *) err "无效选择"; exit 1 ;;
   esac
@@ -210,6 +261,8 @@ case "${1:-}" in
   --show-url) show_argo_vmess_ws_info ;;
   --uninstall-argo) uninstall_argo_vmess_ws ;;
   --write-config) write_argox_vmess_config ;;
+  --check) check_environment ;;
+  --summary) summarize_result ;;
   -h|--help) usage ;;
   "") menu ;;
   *) err "未知参数：$1"; usage; exit 1 ;;

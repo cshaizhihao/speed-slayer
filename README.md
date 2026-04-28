@@ -20,6 +20,9 @@ curl -fsSL https://raw.githubusercontent.com/cshaizhihao/vps-tcp-argo-toolkit/ma
 ### 常用命令
 
 ```bash
+# 环境检测
+bash scripts/vps-argo-vmess-oneclick.sh --check
+
 # 只执行 TCP 优化
 bash scripts/vps-argo-vmess-oneclick.sh --optimize
 
@@ -31,6 +34,9 @@ bash scripts/vps-argo-vmess-oneclick.sh --all
 
 # 查看节点 / 订阅 URL
 bash scripts/vps-argo-vmess-oneclick.sh --show-url
+
+# 输出结果摘要
+bash scripts/vps-argo-vmess-oneclick.sh --summary
 
 # 卸载 Argo VMess + WS
 bash scripts/vps-argo-vmess-oneclick.sh --uninstall-argo
@@ -109,6 +115,17 @@ VMess + WS
 Path：/<WS_PATH>-vm
 alterId：0
 Argo：Cloudflare Tunnel
+```
+
+## 输出位置
+
+```text
+/etc/vps-argo-vmess/install.conf
+/etc/vps-argo-vmess/install.log
+/etc/argox/list
+/etc/argox/subscribe/base64
+/etc/argox/subscribe/clash
+/etc/argox/subscribe/shadowrocket
 ```
 
 ## 审计文档
