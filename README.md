@@ -135,7 +135,7 @@ bash scripts/vps-argo-vmess-oneclick.sh --doctor
 
 ### Argo VMess + WS 隧道
 
-Argo 部分基于 ArgoX，但强制只启用：
+Argo 部分已经改为 Speed Slayer 原生安装链路，不再调用 ArgoX 全家桶。历史审计中，ArgoX 的 VMess+WS 对应：
 
 ```bash
 INSTALL_PROTOCOLS=(f)
@@ -340,12 +340,15 @@ bash <(wget -qO- https://raw.githubusercontent.com/fscarmen/argox/main/argox.sh)
 
 ## 当前状态
 
-当前版本定位：**V1.2 修复增强版**。
+当前版本定位：**V1.3 原生 Argo VMess+WS 版**。
 
 本版本重点修复：
 
 - `speed` 默认即可重启后续跑，不再强制记忆 `speed --continue`
-- Argo 安装隐藏上游瀑布日志，改为进度条 + 日志落盘
+- Argo 安装隐藏瀑布日志，改为进度条 + 日志落盘
+- **Argo VMess+WS 已从 ArgoX 全家桶剥离，改为 Speed Slayer 原生安装链路**
+- 原生生成 Xray VMess+WS inbound、Nginx WS 反代、cloudflared systemd 服务
+- 原生生成 VMess URL、base64、clash、shadowrocket 订阅文件
 - 安装后强校验只能存在 VMess+WS，检测到 Reality/Hysteria/VLESS/Trojan/SS/XHTTP 等残留会直接失败
 - 增加 `speed --clean-argo` 清理全家桶残留
 
