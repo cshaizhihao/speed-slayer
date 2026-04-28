@@ -57,10 +57,9 @@ EOF
 }
 
 intro() {
-  printf "%b%s%b\n" "$C_CYAN" "  Speed Slayer 将 BBR v3 智能 TCP 调优、Argo Tunnel 与 VMess WebSocket 节点生成收拢为一套产品化流程。" "$C_RESET"
-  printf "%b%s%b\n" "$C_WHITE" "  入口：直接输入 ${C_BOLD}${C_GREEN}speed${C_RESET}${C_WHITE} 进入控制台；重启后也输入 ${C_BOLD}${C_GREEN}speed${C_RESET}${C_WHITE} 自动续跑。" "$C_RESET"
-  printf "%b%s%b\n" "$C_DIM" "  GitHub: ${PROJECT_URL}" "$C_RESET"
-  printf "%b%s%b\n" "$C_DIM" "  Version: ${SPEED_SLAYER_VERSION} | Author: NodeSeek @cshaizhihao" "$C_RESET"
+  printf "%b%s%b\n" "$C_CYAN" "  一键完成网络加速、Argo 隧道与 VMess WebSocket 节点部署；重启后可自动接着跑。" "$C_RESET"
+  printf "  入口：直接输入 %bspeed%b 进入控制台；重启后也输入 %bspeed%b 自动续跑。\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+  printf "  %bGitHub:%b %b%s%b  %bVersion:%b %b%s%b  %bAuthor:%b %bNodeSeek @cshaizhihao%b\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_UNDERLINE$C_WHITE" "$PROJECT_URL" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "$SPEED_SLAYER_VERSION" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET" "$C_YELLOW" "$C_RESET"
   echo ""
 }
 
@@ -601,7 +600,7 @@ native_speed_tcp_tune() {
   local mem_mb swap_info swap_total swap_used vm_swappiness vm_dirty_ratio vm_min_free_kbytes
   mem_mb="$(detect_memory_mb)"; mem_mb="${mem_mb:-1024}"
   swap_info="$(detect_swap_status)"; swap_total="${swap_info%%:*}"; swap_used="${swap_info##*:}"
-  echo "Memory=${mem_mb}MB Swap=${swap_total}MB Used=${swap_used}MB"
+  printf "Memory=%b%sMB%b Swap=%b%sMB%b Used=%b%sMB%b\n" "$C_GREEN" "$mem_mb" "$C_RESET" "$C_YELLOW" "$swap_total" "$C_RESET" "$C_CYAN" "$swap_used" "$C_RESET"
   vm_swappiness=5; vm_dirty_ratio=15; vm_min_free_kbytes=65536
   if [ "$mem_mb" -lt 2048 ] 2>/dev/null; then
     vm_swappiness=20; vm_dirty_ratio=20; vm_min_free_kbytes=32768
@@ -684,7 +683,7 @@ EOF
   local dev
   for dev in $(ls /sys/class/net 2>/dev/null | grep -vE '^(lo|docker|veth|br-|virbr|tun|tap)'); do
     tc qdisc replace dev "$dev" root fq >/dev/null 2>&1 || true
-    echo "qdisc[$dev]=$(tc qdisc show dev "$dev" 2>/dev/null | head -1 || true)"
+    printf "qdisc[%b%s%b]=%b%s%b\n" "$C_YELLOW" "$dev" "$C_RESET" "$C_CYAN" "$(tc qdisc show dev "$dev" 2>/dev/null | head -1 || true)" "$C_RESET"
   done
   if ! grep -q 'Speed Slayer file descriptor limits' /etc/security/limits.conf 2>/dev/null; then
     cat >> /etc/security/limits.conf <<'EOF'
@@ -1121,7 +1120,6 @@ install_argo_vmess_ws() {
     return 1
   fi
   success "Argo VMess+WS 安装流程结束"
-  extract_vmess_only || true
   summarize_result || true
   health_check || true
 }
@@ -1272,10 +1270,10 @@ summarize_result() {
 
     echo ""
     printf "%b%s%b\n" "$C_BOLD$C_MAGENTA" "Subscriptions" "$C_RESET"
-    [ -n "$base64" ] && kv "Base64" "$base64" "$C_GREEN"
-    [ -n "$clash" ] && kv "Clash" "$clash" "$C_CYAN"
-    [ -n "$shadowrocket" ] && kv "Shadowrocket" "$shadowrocket" "$C_CYAN"
-    [ -n "$auto" ] && kv "Auto" "$auto" "$C_GREEN"
+    [ -n "$base64" ] && kv "Base64" "$base64" "$C_WHITE"
+    [ -n "$clash" ] && kv "Clash" "$clash" "$C_WHITE"
+    [ -n "$shadowrocket" ] && kv "Shadowrocket" "$shadowrocket" "$C_WHITE"
+    [ -n "$auto" ] && kv "Auto" "$auto" "$C_WHITE"
 
     echo ""
     printf "%b%s%b\n" "$C_BOLD$C_CYAN" "Next Commands" "$C_RESET"
@@ -1567,7 +1565,6 @@ Commands:
   --doctor               一键诊断：环境检测 + 结果摘要 + 健康检查
   --logs [type]          查看日志：install/kernel/tcp/argo/xray
   --repair               清理残留并重装 Argo VMess+WS
-  --roadmap              查看项目进度与下一步计划
   --speedtest            执行 Ookla Speedtest 测速
   --netcheck             检查 DNS / GitHub / Cloudflare / 出站连通性
   --update-self          更新 /usr/local/bin/speed 到 GitHub 最新版本
@@ -1663,14 +1660,12 @@ menu_section_system() {
   cat <<'EOF'
 1. 安装 speed 快捷命令
 2. 更新 speed 自身
-3. Roadmap
 0. 返回主页
 EOF
   read -r -p "请选择: " choice
   case "$choice" in
     1) install_shortcut ;;
     2) update_self ;;
-    3) show_roadmap ;;
     0) menu_body ;;
     *) err "无效选择"; return 1 ;;
   esac
@@ -1681,7 +1676,8 @@ menu_body() {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  Speed Slayer · 控制台
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-介绍：BBR v3 网络优化 + Argo VMess WebSocket 节点生成
+介绍：网络加速 + Argo VMess WebSocket 一键部署
+入口：speed  |  GitHub: https://github.com/cshaizhihao/speed-slayer
 署名：NodeSeek @cshaizhihao
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. 一键执行完整流程
@@ -1742,7 +1738,6 @@ case "${1:-}" in
   --doctor) doctor ;;
   --logs) show_logs "${2:-menu}" ;;
   --repair) repair_install ;;
-  --roadmap) show_roadmap ;;
   --speedtest) run_speedtest_cmd ;;
   --netcheck) run_netcheck ;;
   --update-self) update_self ;;
