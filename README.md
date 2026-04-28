@@ -129,7 +129,7 @@ speed --continue             # 重启后继续完整流程
 speed --show-url             # 查看节点 / 订阅 URL
 speed --summary              # 输出结果摘要
 speed --health               # 安装后健康检查
-speed --doctor               # 一键诊断：环境检测 + 结果摘要 + 健康检查
+speed --doctor               # 全链路诊断：环境、服务、端口、配置、订阅、TCP
 speed --logs                 # 日志菜单
 speed --logs argo            # 直接查看 Argo 日志
 speed --repair               # 清理残留并重装 Argo VMess+WS
@@ -449,10 +449,10 @@ bash <(curl -fsSL "https://raw.githubusercontent.com/Eric86777/vps-tcp-tune/main
 
 ## 当前施工进度
 
-当前进度约 **72%**。
+当前进度约 **82%**。
 
-- 可用 Beta：约 2-3 轮施工
-- 接近 V1.0：约 5-7 轮施工
+- 可用 Beta：约 1 轮施工
+- 接近 V1.0：约 4-5 轮施工
 
 后续每轮推送固定汇报：
 

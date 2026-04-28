@@ -1004,7 +1004,7 @@ update_self() {
 show_roadmap() {
   section "Speed Slayer · Roadmap"
   cat <<'EOF'
-当前进度：约 72%
+当前进度：约 82%
 
 已完成：
 - 一键完整流程与重启续跑
@@ -1027,8 +1027,8 @@ show_roadmap() {
 4. README / CHANGELOG / 发布版本收口
 
 预计剩余：
-- 可用 Beta：约 2-3 轮施工
-- 接近 V1.0：约 5-7 轮施工
+- 可用 Beta：约 1 轮施工
+- 接近 V1.0：约 4-5 轮施工
 EOF
 }
 
@@ -1075,11 +1075,65 @@ repair_install() {
   install_argo_vmess_ws
 }
 
+doctor_check() {
+  local label="$1" cmd="$2" fix="${3:-}"
+  if eval "$cmd" >/dev/null 2>&1; then
+    printf "%b[OK]%b   %s\n" "$C_GREEN" "$C_RESET" "$label"
+  else
+    printf "%b[FAIL]%b %s\n" "$C_RED" "$C_RESET" "$label"
+    [ -n "$fix" ] && printf "       修复建议：%s\n" "$fix"
+    return 1
+  fi
+}
+
+doctor_warn() {
+  local label="$1" cmd="$2" fix="${3:-}"
+  if eval "$cmd" >/dev/null 2>&1; then
+    printf "%b[OK]%b   %s\n" "$C_GREEN" "$C_RESET" "$label"
+  else
+    printf "%b[WARN]%b %s\n" "$C_YELLOW" "$C_RESET" "$label"
+    [ -n "$fix" ] && printf "       建议：%s\n" "$fix"
+  fi
+}
+
 doctor() {
   require_root
-  check_environment || true
-  summarize_result || true
-  health_check || true
+  section "Speed Slayer · Doctor"
+  local failed=0
+  doctor_check "Root 权限" '[ "$(id -u)" -eq 0 ]' "使用 root 执行 speed" || failed=1
+  doctor_check "systemd 可用" 'command -v systemctl && [ -d /run/systemd/system ]' "当前系统可能不支持 systemd，建议使用 Debian/Ubuntu VPS" || failed=1
+  doctor_check "curl 可用" 'command -v curl' "apt install -y curl" || failed=1
+  doctor_check "ss 可用" 'command -v ss' "apt install -y iproute2" || failed=1
+  doctor_check "python3 可用" 'command -v python3' "apt install -y python3" || failed=1
+
+  echo ""
+  echo "服务状态："
+  doctor_warn "xray.service 运行" 'systemctl is-active --quiet xray' "执行 speed --repair"
+  doctor_warn "argo.service 运行" 'systemctl is-active --quiet argo' "执行 speed --repair"
+  doctor_warn "入口端口监听" '[ "$(port_state "${NGINX_PORT:-8001}")" = "listening" ]' "检查 nginx 或执行 speed --repair"
+  doctor_warn "内部 WS 端口监听" '[ "$(port_state "${VMESS_WS_PORT:-30000}")" = "listening" ]' "检查 xray 或执行 speed --repair"
+
+  echo ""
+  echo "配置与订阅："
+  doctor_check "inbound.json 存在" '[ -s /etc/argox/inbound.json ]' "执行 speed --install-argo-vmess" || failed=1
+  if [ -s /etc/argox/inbound.json ]; then
+    doctor_check "VMess+WS 配置有效" 'verify_vmess_only' "执行 speed --repair" || failed=1
+  fi
+  doctor_warn "节点信息已生成" '[ -s /etc/argox/list ]' "执行 speed --install-argo-vmess"
+  doctor_warn "Base64 订阅存在" '[ -s /etc/argox/subscribe/base64 ]' "执行 speed --install-argo-vmess"
+
+  echo ""
+  echo "网络加速："
+  doctor_warn "BBR 已启用" '[ "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)" = "bbr" ]' "执行 speed --optimize"
+  doctor_warn "队列算法 fq" '[ "$(sysctl -n net.core.default_qdisc 2>/dev/null)" = "fq" ]' "执行 speed --optimize"
+
+  echo ""
+  if [ "$failed" -eq 0 ]; then
+    success "Doctor 完成：核心链路未发现阻断项。"
+  else
+    err "Doctor 完成：发现阻断项，建议优先执行 speed --repair 或查看 speed --logs。"
+    return 1
+  fi
 }
 
 usage() {
