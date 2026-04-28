@@ -94,8 +94,7 @@ install_shortcut() {
   success "已安装快捷命令：speed"
   echo "以后可直接执行："
   echo "  speed"
-  echo "  speed"
-  echo "  speed --all"
+  echo "  speed --force-all"
 }
 
 save_pending_state() {
@@ -487,8 +486,9 @@ clean_argo_state() {
   success "旧 Argo 残留已备份清理；现在可执行：speed --install-argo-vmess"
 }
 
-run_all() {
+force_all() {
   banner
+  intro
   install_shortcut || true
   if ! is_xanmod_kernel; then
     save_pending_state
@@ -499,6 +499,13 @@ run_all() {
   run_tcp_optimize
   install_argo_vmess_ws
   clear_state || true
+}
+
+run_all() {
+  banner
+  intro
+  warn "--all 现在默认进入交互主页，避免首次运行直接执行 BBR/系统修改。"
+  menu_body
 }
 
 continue_after_reboot() {
@@ -669,7 +676,8 @@ Usage:
 Commands:
   --optimize             执行全自动 TCP 优化：BBR v3 + 网络调优
   --install-argo-vmess   安装/重装 Argo VMess + WS，并生成节点/订阅 URL
-  --all                  智能全流程；如需重启，重启后执行 speed 即可继续
+  --all                  显示交互主页（安全默认，不直接修改系统）
+  --force-all            无人值守完整流程；如需重启，重启后执行 speed 即可继续
   --continue             重启后继续：TCP 网络调优 + Argo VMess + WS（兼容旧用法）
   --show-url             查看已生成的节点/订阅信息
   --uninstall-argo       卸载 Argo VMess + WS 相关服务
@@ -702,15 +710,17 @@ Examples:
 EOF
 }
 
-menu() {
-  banner
+menu_body() {
   cat <<'EOF'
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Speed Slayer
+ Speed Slayer · 主页
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 执行全自动 TCP 优化（BBR v3 + 网络调优）
+介绍：BBR v3 / XanMod 网络调优 + 原生 Argo VMess WebSocket 节点生成
+署名：NodeSeek @cshaizhihao
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. 执行 TCP 优化（BBR v3 + 网络调优）
 2. 安装/重装 Argo VMess + WS
-3. 一键执行：TCP 优化 + Argo VMess + WS
+3. 一键执行完整流程（TCP 优化 + Argo VMess + WS）
 4. 查看节点/订阅信息
 5. 卸载 Argo VMess + WS
 6. 清理旧 Argo 残留
@@ -728,7 +738,7 @@ EOF
   case "$choice" in
     1) run_tcp_optimize ;;
     2) install_argo_vmess_ws ;;
-    3) run_all ;;
+    3) force_all ;;
     4) show_argo_vmess_ws_info ;;
     5) uninstall_argo_vmess_ws ;;
     6) clean_argo_state ;;
@@ -744,8 +754,15 @@ EOF
   esac
 }
 
+menu() {
+  banner
+  intro
+  menu_body
+}
+
 default_action() {
   banner
+  intro
   require_root
   if [ -s "$STATE_FILE" ]; then
     info "检测到续跑状态，自动继续完整流程。"
@@ -759,6 +776,7 @@ case "${1:-}" in
   --optimize) run_tcp_optimize ;;
   --install-argo-vmess) install_argo_vmess_ws ;;
   --all) run_all ;;
+  --force-all) force_all ;;
   --continue) continue_after_reboot ;;
   --show-url) show_argo_vmess_ws_info ;;
   --uninstall-argo) uninstall_argo_vmess_ws ;;

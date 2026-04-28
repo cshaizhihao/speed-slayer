@@ -2,7 +2,11 @@
 
 **BBR v3 网络调优 + Cloudflare Argo VMess WebSocket 隧道一键斩速器**
 
-Speed Slayer 是一个面向 VPS 的专用一键工具，用来完成两件事：
+Speed Slayer 是一个面向 VPS 的专用一键工具。
+
+**Author: NodeSeek @cshaizhihao**
+
+它用来完成两件事：
 
 1. **TCP 一键全自动优化**：XanMod / BBR v3 / 网络参数调优
 2. **Argo 隧道节点生成**：只保留 VMess + WebSocket，并自动输出订阅 URL
@@ -42,7 +46,9 @@ https://github.com/cshaizhihao/speed-slayer
 curl -fsSL https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main/scripts/vps-argo-vmess-oneclick.sh -o /tmp/speed && bash /tmp/speed --all
 ```
 
-首次执行时，如果 TCP 阶段安装了 XanMod / BBR v3 内核，脚本会提示重启。
+首次执行 `--all` 会进入交互主页，不会直接修改系统。若需要无人值守完整流程，可使用 `speed --force-all`。
+
+如果 TCP 阶段安装了 XanMod / BBR v3 内核，脚本会提示重启。
 
 重启后继续执行：
 
@@ -97,7 +103,8 @@ speed --doctor
 speed --check                # 环境检测
 speed --optimize             # 只执行 TCP 优化
 speed --install-argo-vmess   # 只安装 Argo VMess + WS
-speed --all                  # 智能全流程：TCP 优化 + Argo VMess + WS
+speed --all                  # 显示交互主页（安全默认）
+speed --force-all            # 无人值守完整流程：TCP 优化 + Argo VMess + WS
 speed                         # 默认入口；检测到续跑状态时自动继续
 speed --continue             # 重启后继续完整流程（兼容旧用法）
 speed --show-url             # 查看节点 / 订阅 URL
