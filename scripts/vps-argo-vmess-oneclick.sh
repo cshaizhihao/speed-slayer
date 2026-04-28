@@ -53,13 +53,17 @@ banner() {
 ╚══════╝╚═╝     ╚══════╝╚══════╝╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
 EOF
   printf "%b" "$C_RESET"
-  printf "%b%s%b\n" "$C_BOLD$C_CYAN" "        VPS 网络加速 · Argo 隧道 · VMess WebSocket" "$C_RESET"
+  printf "%b%s%b\n" "$C_BOLD$C_CYAN" "        『 SPEED SLAYER 』" "$C_RESET"
 }
 
 intro() {
-  printf "%b%s%b\n" "$C_BOLD$C_CYAN" "  斩断延迟，撕开隧道，释放节点。" "$C_RESET"
-  printf "  入口：直接输入 %bspeed%b 进入控制台；重启后也输入 %bspeed%b 自动续跑。\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
-  printf "  %bGitHub:%b %b%s%b  %bVersion:%b %b%s%b  %bAuthor:%b %bNodeSeek @cshaizhihao%b\n" "$C_BOLD$C_CYAN" "$C_RESET" "$C_UNDERLINE$C_WHITE" "$PROJECT_URL" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET" "$C_GREEN" "$SPEED_SLAYER_VERSION" "$C_RESET" "$C_BOLD$C_CYAN" "$C_RESET" "$C_YELLOW" "$C_RESET"
+  line
+  printf "%b%s%b\n" "$C_BOLD$C_CYAN" " 『斩断延迟』『撕开隧道』『释放节点』" "$C_RESET"
+  printf "%b%s%b\n" "$C_WHITE" "  网络加速 · Argo 隧道 · VMess WebSocket" "$C_RESET"
+  printf "  快捷入口：%b speed %b    重启续跑：%b speed %b\n" "$C_BOLD$C_GREEN" "$C_RESET" "$C_BOLD$C_GREEN" "$C_RESET"
+  printf "  项目仓库：%b%s%b\n" "$C_UNDERLINE$C_CYAN" "$PROJECT_URL" "$C_RESET"
+  printf "  版本：%b%s%b    作者：%bNodeSeek @cshaizhihao%b\n" "$C_GREEN" "$SPEED_SLAYER_VERSION" "$C_RESET" "$C_YELLOW" "$C_RESET"
+  line
   echo ""
 }
 
@@ -1673,17 +1677,14 @@ EOF
 
 menu_body() {
   cat <<'EOF'
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Speed Slayer · 控制台
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. 一键执行完整流程
-2. 节点管理
-3. TCP 加速
-4. 诊断与日志
-5. 修复与清理
-6. 更新
-0. 退出
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 『Speed Slayer 控制台』
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. 一键执行完整流程        2. 节点管理
+  3. TCP 加速                4. 诊断与日志
+  5. 修复与清理              6. 更新
+  0. 退出
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
   read -r -p "请输入选择: " choice
   case "$choice" in
