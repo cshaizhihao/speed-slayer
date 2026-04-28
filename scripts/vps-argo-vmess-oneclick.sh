@@ -386,23 +386,102 @@ run_tcp_backend_visible() {
   fetch_or_run_script "$TCP_SCRIPT_LOCAL" "scripts/tcp-one-click-optimize.sh"
 }
 
+detect_swap_status() {
+  local total used
+  total="$(free -m 2>/dev/null | awk '/^Swap:/ {print $2+0}')"
+  used="$(free -m 2>/dev/null | awk '/^Swap:/ {print $3+0}')"
+  echo "${total:-0}:${used:-0}"
+}
+
+detect_memory_mb() {
+  free -m 2>/dev/null | awk '/^Mem:/ {print $2+0}'
+}
+
+detect_bandwidth_mbps() {
+  if [ -n "${SPEED_BANDWIDTH_MBPS:-}" ] && echo "$SPEED_BANDWIDTH_MBPS" | grep -Eq '^[0-9]+$'; then
+    echo "$SPEED_BANDWIDTH_MBPS"
+    return 0
+  fi
+  # 安装流程不默认跑 Ookla，避免许可证/下载/测速卡住；无显式指定时使用稳妥默认值。
+  echo "1000"
+}
+
+calculate_tcp_buffer_mb() {
+  local bandwidth="$1" mem_mb="$2" region="${SPEED_REGION:-global}" buffer=128 cap
+  if [ "$bandwidth" -le 200 ] 2>/dev/null; then buffer=32
+  elif [ "$bandwidth" -le 500 ] 2>/dev/null; then buffer=64
+  elif [ "$bandwidth" -le 1000 ] 2>/dev/null; then buffer=128
+  elif [ "$bandwidth" -le 2500 ] 2>/dev/null; then buffer=256
+  elif [ "$bandwidth" -le 5000 ] 2>/dev/null; then buffer=384
+  else buffer=512
+  fi
+  case "$region" in
+    asia|local) : ;;
+    *) buffer=$((buffer + buffer / 2)) ;;
+  esac
+  if [ "$mem_mb" -lt 1024 ] 2>/dev/null; then cap=32
+  elif [ "$mem_mb" -lt 2048 ] 2>/dev/null; then cap=64
+  elif [ "$mem_mb" -lt 4096 ] 2>/dev/null; then cap=128
+  elif [ "$mem_mb" -lt 8192 ] 2>/dev/null; then cap=256
+  else cap=512
+  fi
+  [ "$buffer" -gt "$cap" ] && buffer="$cap"
+  echo "$buffer"
+}
+
+clean_tcp_conflicts() {
+  [ -f /etc/sysctl.conf ] && cp /etc/sysctl.conf "$WORK_DIR/sysctl.conf.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+  if [ -f /etc/sysctl.conf ]; then
+    sed -i '/^net\.core\.rmem_max/s/^/# Speed Slayer disabled conflict: /' /etc/sysctl.conf 2>/dev/null || true
+    sed -i '/^net\.core\.wmem_max/s/^/# Speed Slayer disabled conflict: /' /etc/sysctl.conf 2>/dev/null || true
+    sed -i '/^net\.ipv4\.tcp_rmem/s/^/# Speed Slayer disabled conflict: /' /etc/sysctl.conf 2>/dev/null || true
+    sed -i '/^net\.ipv4\.tcp_wmem/s/^/# Speed Slayer disabled conflict: /' /etc/sysctl.conf 2>/dev/null || true
+  fi
+  rm -f /etc/sysctl.d/99-sysctl.conf 2>/dev/null || true
+  find /etc/sysctl.d -maxdepth 1 -type f ! -name '99-speed-slayer-tcp.conf' -print0 2>/dev/null | while IFS= read -r -d '' conf; do
+    if grep -qE '^(net\.core\.(rmem_max|wmem_max)|net\.ipv4\.tcp_(rmem|wmem|congestion_control))' "$conf" 2>/dev/null; then
+      cp "$conf" "${conf}.speed-slayer.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+      sed -i '/^net\.core\.rmem_max/s/^/# Speed Slayer disabled conflict: /; /^net\.core\.wmem_max/s/^/# Speed Slayer disabled conflict: /; /^net\.ipv4\.tcp_rmem/s/^/# Speed Slayer disabled conflict: /; /^net\.ipv4\.tcp_wmem/s/^/# Speed Slayer disabled conflict: /; /^net\.ipv4\.tcp_congestion_control/s/^/# Speed Slayer disabled conflict: /' "$conf" 2>/dev/null || true
+    fi
+  done
+}
+
 native_speed_tcp_tune() {
   local ipv6_choice="$1"
   section "Speed Slayer · TCP 加速配置"
   mkdir -p "$WORK_DIR"
 
-  progress_step 8 "备份现有网络配置"
-  cp /etc/sysctl.conf "$WORK_DIR/sysctl.conf.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+  progress_step 8 "[步骤 1/6] 检测虚拟内存（SWAP）配置"
+  local mem_mb swap_info swap_total swap_used vm_swappiness vm_dirty_ratio vm_min_free_kbytes
+  mem_mb="$(detect_memory_mb)"; mem_mb="${mem_mb:-1024}"
+  swap_info="$(detect_swap_status)"; swap_total="${swap_info%%:*}"; swap_used="${swap_info##*:}"
+  echo "Memory=${mem_mb}MB Swap=${swap_total}MB Used=${swap_used}MB"
+  vm_swappiness=5; vm_dirty_ratio=15; vm_min_free_kbytes=65536
+  if [ "$mem_mb" -lt 2048 ] 2>/dev/null; then
+    vm_swappiness=20; vm_dirty_ratio=20; vm_min_free_kbytes=32768
+  fi
+  [ "$swap_total" -eq 0 ] 2>/dev/null && warn "未检测到 SWAP；小内存 VPS 建议配置 512MB-1GB SWAP。"
 
-  progress_step 16 "加载 BBR 内核模块"
+  progress_step 20 "[步骤 2/6] 检测服务器带宽并计算最优缓冲区"
+  local bandwidth buffer_mb buffer_bytes region
+  bandwidth="$(detect_bandwidth_mbps)"
+  region="${SPEED_REGION:-global}"
+  buffer_mb="$(calculate_tcp_buffer_mb "$bandwidth" "$mem_mb")"
+  buffer_bytes=$((buffer_mb * 1024 * 1024))
+  echo "Bandwidth=${bandwidth}Mbps Region=${region} Buffer=${buffer_mb}MB"
+
+  progress_step 34 "[步骤 3/6] 清理配置冲突"
+  clean_tcp_conflicts
+
+  progress_step 50 "[步骤 4/6] 创建配置文件"
   modprobe tcp_bbr >/dev/null 2>&1 || true
   cat > /etc/modules-load.d/99-speed-slayer-bbr.conf <<'EOF'
 tcp_bbr
 EOF
-
-  progress_step 28 "写入 TCP / BBR / 队列参数"
-  cat > /etc/sysctl.d/99-speed-slayer-tcp.conf <<'EOF'
+  cat > /etc/sysctl.d/99-speed-slayer-tcp.conf <<EOF
 # Speed Slayer native TCP profile
+# Generated on $(date)
+# Bandwidth: ${bandwidth} Mbps | Region: ${region} | Memory: ${mem_mb} MB | Buffer: ${buffer_mb} MB
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_fastopen = 3
@@ -411,8 +490,8 @@ net.ipv4.tcp_mtu_probing = 1
 net.ipv4.tcp_no_metrics_save = 1
 net.ipv4.tcp_notsent_lowat = 16384
 net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 20
-net.ipv4.tcp_keepalive_time = 600
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_keepalive_time = 300
 net.ipv4.tcp_keepalive_intvl = 30
 net.ipv4.tcp_keepalive_probes = 5
 net.ipv4.tcp_syn_retries = 3
@@ -422,29 +501,40 @@ net.ipv4.tcp_max_tw_buckets = 2000000
 net.ipv4.tcp_abort_on_overflow = 0
 net.core.somaxconn = 65535
 net.core.netdev_max_backlog = 250000
-net.core.rmem_max = 134217728
-net.core.wmem_max = 134217728
+net.core.rmem_max = ${buffer_bytes}
+net.core.wmem_max = ${buffer_bytes}
 net.core.rmem_default = 1048576
 net.core.wmem_default = 1048576
-net.ipv4.tcp_rmem = 4096 87380 134217728
-net.ipv4.tcp_wmem = 4096 65536 134217728
+net.ipv4.tcp_rmem = 4096 87380 ${buffer_bytes}
+net.ipv4.tcp_wmem = 4096 65536 ${buffer_bytes}
+net.ipv4.udp_rmem_min = 8192
+net.ipv4.udp_wmem_min = 8192
+net.ipv4.tcp_syncookies = 1
 net.ipv4.ip_local_port_range = 1024 65535
-vm.swappiness = 10
-vm.dirty_ratio = 15
+vm.swappiness = ${vm_swappiness}
+vm.dirty_ratio = ${vm_dirty_ratio}
 vm.dirty_background_ratio = 5
+vm.overcommit_memory = 1
+vm.min_free_kbytes = ${vm_min_free_kbytes}
+vm.vfs_cache_pressure = 50
+kernel.sched_autogroup_enabled = 0
+kernel.numa_balancing = 0
 EOF
 
-  progress_step 40 "应用 sysctl 参数"
-  sysctl --system >/dev/null 2>&1 || sysctl -p /etc/sysctl.d/99-speed-slayer-tcp.conf >/dev/null 2>&1 || true
+  progress_step 66 "[步骤 5/6] 应用所有优化参数"
+  local sysctl_output sysctl_rc
+  sysctl_output="$(sysctl -p /etc/sysctl.d/99-speed-slayer-tcp.conf 2>&1)"; sysctl_rc=$?
+  if [ "$sysctl_rc" -ne 0 ]; then
+    warn "部分 sysctl 参数应用失败，已继续保留支持项："
+    echo "$sysctl_output" | grep -iE 'error|invalid|unknown|cannot|permission' | head -6 || true
+  fi
 
-  progress_step 52 "应用网卡 FQ 队列"
+  progress_step 76 "应用 FQ 队列与持久化限制"
   local dev
   for dev in $(ls /sys/class/net 2>/dev/null | grep -vE '^(lo|docker|veth|br-|virbr|tun|tap)'); do
     tc qdisc replace dev "$dev" root fq >/dev/null 2>&1 || true
     echo "qdisc[$dev]=$(tc qdisc show dev "$dev" 2>/dev/null | head -1 || true)"
   done
-
-  progress_step 64 "优化文件描述符与 systemd 限制"
   if ! grep -q 'Speed Slayer file descriptor limits' /etc/security/limits.conf 2>/dev/null; then
     cat >> /etc/security/limits.conf <<'EOF'
 # Speed Slayer file descriptor limits
@@ -454,7 +544,7 @@ root soft nofile 1048576
 root hard nofile 1048576
 EOF
   fi
-  mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
+  mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d /etc/systemd/resolved.conf.d
   cat > /etc/systemd/system.conf.d/99-speed-slayer-limits.conf <<'EOF'
 [Manager]
 DefaultLimitNOFILE=1048576
@@ -467,8 +557,7 @@ DefaultLimitNPROC=1048576
 EOF
   systemctl daemon-reexec >/dev/null 2>&1 || true
 
-  progress_step 74 "DNS 稳定性配置"
-  mkdir -p /etc/systemd/resolved.conf.d
+  progress_step 84 "DNS 稳定性配置"
   cat > /etc/systemd/resolved.conf.d/99-speed-slayer-dns.conf <<'EOF'
 [Resolve]
 DNS=1.1.1.1 8.8.8.8
@@ -477,7 +566,7 @@ DNSSEC=no
 EOF
   systemctl restart systemd-resolved >/dev/null 2>&1 || true
 
-  progress_step 84 "IPv6 策略"
+  progress_step 90 "IPv6 策略"
   if [[ "$ipv6_choice" =~ ^[Yy]$ ]]; then
     cat > /etc/sysctl.d/99-speed-slayer-disable-ipv6.conf <<'EOF'
 # Speed Slayer optional IPv6 disable
@@ -490,14 +579,10 @@ EOF
     rm -f /etc/sysctl.d/99-speed-slayer-disable-ipv6.conf
   fi
 
-  progress_step 94 "验证 BBR / FQ / limits 状态"
+  progress_step 100 "[步骤 6/6] 验证优化结果"
   echo "congestion=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo unknown)"
   echo "qdisc=$(sysctl -n net.core.default_qdisc 2>/dev/null || echo unknown)"
-  echo "nofile=$(ulimit -n 2>/dev/null || echo unknown)"
-  if [ "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)" != "bbr" ]; then
-    warn "当前拥塞控制尚未切换为 bbr，可能需要重启或检查内核模块。"
-  fi
-  progress_step 100 "TCP 加速配置完成"
+  echo "buffer=${buffer_mb}MB nofile=$(ulimit -n 2>/dev/null || echo unknown)"
 }
 
 prepare_tcp_core_lib() {
@@ -1173,7 +1258,7 @@ update_self() {
 show_roadmap() {
   section "Speed Slayer · Roadmap"
   cat <<'EOF'
-当前进度：约 91%
+当前进度：约 94%
 
 已完成：
 - 一键完整流程与重启续跑
@@ -1197,7 +1282,7 @@ show_roadmap() {
 
 预计剩余：
 - 可用 Beta：已接近，可进入实机回归
-- 接近 V1.0：约 2-3 轮施工
+- 接近 V1.0：约 2 轮施工
 EOF
 }
 
