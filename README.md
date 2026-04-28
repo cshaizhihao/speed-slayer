@@ -38,6 +38,9 @@ bash scripts/vps-argo-vmess-oneclick.sh --show-url
 # 输出结果摘要
 bash scripts/vps-argo-vmess-oneclick.sh --summary
 
+# 安装后健康检查
+bash scripts/vps-argo-vmess-oneclick.sh --health
+
 # 卸载 Argo VMess + WS
 bash scripts/vps-argo-vmess-oneclick.sh --uninstall-argo
 ```
@@ -116,6 +119,21 @@ Path：/<WS_PATH>-vm
 alterId：0
 Argo：Cloudflare Tunnel
 ```
+
+## 健康检查
+
+```bash
+bash scripts/vps-argo-vmess-oneclick.sh --health
+```
+
+会检查：
+
+- `argo.service` 是否运行
+- `xray.service` 是否运行
+- Nginx / 本地入口端口是否监听
+- `/etc/argox/list` 是否生成
+- `/etc/argox/subscribe/base64` 是否生成
+- 失败时输出对应修复方向
 
 ## 输出位置
 

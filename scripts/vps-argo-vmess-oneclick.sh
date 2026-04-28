@@ -114,6 +114,7 @@ install_argo_vmess_ws() {
   success "Argo VMess+WS 安装流程结束"
   show_argo_vmess_ws_info || true
   summarize_result || true
+  health_check || true
 }
 
 show_argo_vmess_ws_info() {
@@ -189,6 +190,88 @@ summarize_result() {
   fi
 }
 
+service_state() {
+  local svc="$1"
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then
+      echo "running"
+    elif systemctl list-unit-files "$svc" >/dev/null 2>&1 || systemctl status "$svc" >/dev/null 2>&1; then
+      echo "installed-but-not-running"
+    else
+      echo "not-found"
+    fi
+  else
+    if pgrep -f "$svc" >/dev/null 2>&1; then
+      echo "running"
+    else
+      echo "unknown"
+    fi
+  fi
+}
+
+port_state() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq "(:|\\])${port}$"; then
+    echo "listening"
+  else
+    echo "not-listening"
+  fi
+}
+
+health_check() {
+  require_root
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo " Speed Argo TCP · 健康检查"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+  local fail=0
+  local argo_state xray_state nginx_state nginx_port argo_domain
+  argo_state="$(service_state argo)"
+  xray_state="$(service_state xray)"
+  nginx_state="$(service_state nginx)"
+  nginx_port="$(awk -F= '/^NGINX_PORT=/{print $2}' "$CONFIG_FILE" 2>/dev/null | tr -d "'\"")"
+  nginx_port="${nginx_port:-8001}"
+
+  printf "%-18s %s\n" "argo.service:" "$argo_state"
+  printf "%-18s %s\n" "xray.service:" "$xray_state"
+  printf "%-18s %s\n" "nginx.service:" "$nginx_state"
+  printf "%-18s %s (%s)\n" "本地入口端口:" "$nginx_port" "$(port_state "$nginx_port")"
+
+  [ "$argo_state" = "running" ] || fail=1
+  [ "$xray_state" = "running" ] || fail=1
+  [ "$(port_state "$nginx_port")" = "listening" ] || fail=1
+
+  if [ -s /etc/argox/list ]; then
+    echo "节点列表: FOUND /etc/argox/list"
+    argo_domain="$(grep -Eo 'https?://[^/ ]+' /etc/argox/list | sed 's#https\?://##' | grep -E 'trycloudflare\.com|cloudflare|\.' | head -n1 || true)"
+    [ -n "$argo_domain" ] && echo "Argo 域名: $argo_domain" || echo "Argo 域名: 未能从节点列表提取"
+  else
+    echo "节点列表: MISSING /etc/argox/list"
+    fail=1
+  fi
+
+  if [ -s /etc/argox/subscribe/base64 ]; then
+    echo "Base64订阅: FOUND"
+  else
+    echo "Base64订阅: MISSING"
+    fail=1
+  fi
+
+  echo ""
+  if [ "$fail" -eq 0 ]; then
+    success "健康检查通过：Argo / Xray / 本地入口 / 订阅文件均可用"
+    return 0
+  fi
+
+  warn "健康检查未完全通过，建议按以下方向排查："
+  [ "$argo_state" = "running" ] || echo "- Argo 未运行：执行 systemctl status argo 或重新运行 --install-argo-vmess"
+  [ "$xray_state" = "running" ] || echo "- Xray 未运行：执行 systemctl status xray，检查 /etc/argox/xray.log"
+  [ "$(port_state "$nginx_port")" = "listening" ] || echo "- 本地入口端口未监听：检查 nginx 配置或端口占用 ss -lntp | grep $nginx_port"
+  [ -s /etc/argox/list ] || echo "- 节点列表未生成：查看 $LOG_FILE，确认 Argo 是否拿到隧道域名"
+  [ -s /etc/argox/subscribe/base64 ] || echo "- 订阅文件缺失：重新执行 --show-url 或 --install-argo-vmess"
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 VPS TCP Optimize + Argo VMess+WS OneClick
@@ -205,6 +288,7 @@ Commands:
   --write-config         仅生成 Argo VMess + WS 配置文件，不安装
   --check                检测当前环境和已安装状态
   --summary              输出结果摘要
+  --health               安装后健康检查
   -h, --help             显示帮助
 
 Optional environment variables:
@@ -237,6 +321,7 @@ menu() {
 5. 卸载 Argo VMess + WS
 6. 环境检测
 7. 结果摘要
+8. 健康检查
 0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
@@ -249,6 +334,7 @@ EOF
     5) uninstall_argo_vmess_ws ;;
     6) check_environment ;;
     7) summarize_result ;;
+    8) health_check ;;
     0) exit 0 ;;
     *) err "无效选择"; exit 1 ;;
   esac
@@ -263,6 +349,7 @@ case "${1:-}" in
   --write-config) write_argox_vmess_config ;;
   --check) check_environment ;;
   --summary) summarize_result ;;
+  --health) health_check ;;
   -h|--help) usage ;;
   "") menu ;;
   *) err "未知参数：$1"; usage; exit 1 ;;
