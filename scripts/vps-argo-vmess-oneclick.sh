@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.6"
+SPEED_SLAYER_VERSION="v1.0.7"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1634,10 +1634,16 @@ uninstall_speed_slayer() {
   section "🗑️ Speed Slayer · 删除/卸载"
   warn "此操作会移除 Speed Slayer 安装的快捷命令、续跑状态、Argo/Xray/Nginx 配置、TCP sysctl 配置与 systemd 残留。"
   warn "不会卸载 XanMod 内核本身，避免误删系统内核；如需回退内核，请在系统启动项/包管理器中单独处理。"
-  if ! confirm_action "确认删除 Speed Slayer 相关内容？默认回车 = Y"; then
-    warn "已取消删除。"
-    return 0
-  fi
+  local confirm_delete=""
+  printf "%b?%b 确认删除 Speed Slayer 相关内容？默认回车 = N %b[y/N]%b " "$C_YELLOW" "$C_RESET" "$C_RED" "$C_RESET"
+  read -r confirm_delete || confirm_delete=""
+  case "$confirm_delete" in
+    [Yy]|[Yy][Ee][Ss]) ;;
+    *)
+      warn "已取消删除。"
+      return 0
+      ;;
+  esac
 
   local ts
   ts="$(date +%Y%m%d%H%M%S)"
