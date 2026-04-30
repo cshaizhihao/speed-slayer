@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v2.0.1"
+SPEED_SLAYER_VERSION="v2.0.2"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -423,14 +423,28 @@ native_install_xanmod_kernel() {
   local distro_codename="${VERSION_CODENAME:-}"
   [ -z "$distro_codename" ] && distro_codename="$(lsb_release -sc 2>/dev/null || true)"
   [ -z "$distro_codename" ] && distro_codename="bookworm"
-  echo "deb [signed-by=${keyring}] http://deb.xanmod.org ${distro_codename} main" > "$repo_file"
-  echo "[XanMod APT] repo codename: ${distro_codename}" >>"$WORK_DIR/kernel-install.log"
+
+  # XanMod has moved kernel packages between suite-specific repos (jammy/bookworm)
+  # and the generic "releases" repo. Prefer releases first because it currently
+  # carries the real linux-xanmod packages, then fall back to distro codename.
+  local repo_suite repo_suites=("releases")
+  [ "$distro_codename" = "releases" ] || repo_suites+=("$distro_codename")
 
   progress_step 55 "检测 CPU x86-64-v 等级"
-  local level pkg install_ok=0
+  local level pkg install_ok=0 repo_ok=0
   level="$(detect_x64_level)"
-  apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
-  if ! pkg="$(select_xanmod_pkg "$level")"; then
+  for repo_suite in "${repo_suites[@]}"; do
+    echo "deb [signed-by=${keyring}] https://deb.xanmod.org ${repo_suite} main" > "$repo_file"
+    echo "[XanMod APT] repo suite: ${repo_suite}" >>"$WORK_DIR/kernel-install.log"
+    apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
+    if pkg="$(select_xanmod_pkg "$level")"; then
+      repo_ok=1
+      echo "[XanMod APT] selected suite: ${repo_suite}" >>"$WORK_DIR/kernel-install.log"
+      break
+    fi
+    echo "[XanMod APT] no package in suite: ${repo_suite}" >>"$WORK_DIR/kernel-install.log"
+  done
+  if [ "$repo_ok" -ne 1 ]; then
     err "未找到可安装的 XanMod 内核包。"
     echo "可用包候选："
     show_xanmod_candidates
