@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v2.0.5"
+SPEED_SLAYER_VERSION="v2.0.6"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -143,12 +143,24 @@ install_shortcut() {
 save_pending_state() {
   require_root
   mkdir -p "$WORK_DIR"
+  local mode="${1:-tcp}"
   cat > "$STATE_FILE" <<EOF
 PENDING_CONTINUE=1
+PENDING_MODE=${mode}
 CREATED_AT=$(date -Is 2>/dev/null || date)
 NEXT_ACTION=continue
 EOF
   chmod 600 "$STATE_FILE"
+}
+
+pending_mode() {
+  if [ -s "$STATE_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$STATE_FILE" 2>/dev/null || true
+    echo "${PENDING_MODE:-full}"
+  else
+    echo ""
+  fi
 }
 
 cdn_recommendation() {
@@ -193,7 +205,7 @@ show_continue_hint() {
   echo ""
   echo "  speed"
   echo ""
-  echo "Speed Slayer 会自动识别续跑状态，继续完成：TCP 网络调优 + Argo VMess+WS 安装 + 健康检查。"
+  echo "Speed Slayer 会根据当前流程继续：单独 TCP 只继续 TCP，完整流程才继续 Argo。"
 }
 
 confirm_reboot_now() {
@@ -282,7 +294,7 @@ tcp_plan_panel() {
   else
     progress_step 10 "当前不是 XanMod：准备安装 XanMod + BBR v3 内核"
     progress_step 60 "安装完成后需要重启"
-    progress_step 100 "重启后执行 speed 自动继续后续 TCP 调优 + Argo 安装"
+    progress_step 100 "重启后执行 speed 自动继续当前流程"
   fi
 }
 
@@ -424,11 +436,13 @@ native_install_xanmod_kernel() {
   [ -z "$distro_codename" ] && distro_codename="$(lsb_release -sc 2>/dev/null || true)"
   [ -z "$distro_codename" ] && distro_codename="bookworm"
 
-  # XanMod has moved kernel packages between suite-specific repos (jammy/bookworm)
-  # and the generic "releases" repo. Prefer releases first because it currently
-  # carries the real linux-xanmod packages, then fall back to distro codename.
-  local repo_suite repo_suites=("releases")
-  [ "$distro_codename" = "releases" ] || repo_suites+=("$distro_codename")
+  # XanMod package availability changes across suites. Try the system codename first,
+  # then known package-carrying suites, and finally the generic releases suite.
+  local repo_suite repo_suites=()
+  repo_suites+=("$distro_codename")
+  [ "$distro_codename" = "bookworm" ] || repo_suites+=("bookworm")
+  [ "$distro_codename" = "trixie" ] || repo_suites+=("trixie")
+  [ "$distro_codename" = "releases" ] || repo_suites+=("releases")
 
   progress_step 55 "检测 CPU x86-64-v 等级"
   local level pkg install_ok=0 repo_ok=0
@@ -436,6 +450,7 @@ native_install_xanmod_kernel() {
   for repo_suite in "${repo_suites[@]}"; do
     echo "deb [signed-by=${keyring}] https://deb.xanmod.org ${repo_suite} main" > "$repo_file"
     echo "[XanMod APT] repo suite: ${repo_suite}" >>"$WORK_DIR/kernel-install.log"
+    progress_step 45 "刷新 XanMod APT 源：${repo_suite}"
     apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
     if pkg="$(select_xanmod_pkg "$level")"; then
       repo_ok=1
@@ -975,7 +990,7 @@ run_tcp_optimize() {
     if is_container_env; then
       warn "检测到容器环境：容器不能安装/切换 XanMod 宿主机内核，已进入无内核降级模式。"
     else
-      save_pending_state
+      save_pending_state "${SPEED_PENDING_MODE:-tcp}"
       section "安装 XanMod + BBR v3 内核"
       warn "当前不是 XanMod 内核。此阶段保留核心输出，避免隐藏安装失败或重启提示。"
       if run_tcp_backend_visible; then
@@ -1349,11 +1364,10 @@ force_all() {
   ASSUME_Y=1
   install_shortcut || true
   if ! is_xanmod_kernel && ! is_container_env; then
-    save_pending_state
-    run_tcp_optimize
+    SPEED_PENDING_MODE=full run_tcp_optimize
     return 0
   fi
-  run_tcp_optimize
+  SPEED_PENDING_MODE=full run_tcp_optimize
   install_argo_vmess_ws
   clear_state || true
 }
@@ -1391,10 +1405,21 @@ continue_after_reboot() {
     echo "  4. 如需取消续跑状态回到主页：speed --clear-state"
     exit 1
   fi
-  info "检测到 XanMod 内核，继续执行 TCP 网络调优 + Argo VMess+WS"
-  run_tcp_optimize
-  install_argo_vmess_ws
-  clear_state || true
+  local mode
+  mode="$(pending_mode)"
+  case "$mode" in
+    full|all)
+      info "检测到 XanMod 内核，继续完整流程：TCP 网络调优 + Argo VMess+WS"
+      SPEED_PENDING_MODE=full run_tcp_optimize
+      install_argo_vmess_ws
+      clear_state || true
+      ;;
+    tcp|tcp-only|tcp_only|*)
+      info "检测到 XanMod 内核，继续单独 TCP 调优流程。"
+      SPEED_PENDING_MODE=tcp run_tcp_optimize
+      clear_state || true
+      ;;
+  esac
 }
 
 check_environment() {
@@ -2054,10 +2079,8 @@ default_action() {
   require_root
   install_shortcut || true
   if [ -s "$STATE_FILE" ]; then
-    warn "检测到未完成的续跑状态。"
-    echo "可直接选择 1 继续 Speed Slayer TCP+Argo，或执行 speed --continue 自动续跑。"
-    echo "如需取消续跑状态：speed --clear-state"
-    echo ""
+    info "检测到续跑状态，自动继续当前流程。"
+    continue_after_reboot
   fi
   menu
 }
