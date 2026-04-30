@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v2.0.0"
+SPEED_SLAYER_VERSION="v2.0.1"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1346,7 +1346,12 @@ force_all() {
 
 run_all() {
   render_header_once
-  warn "--all 是安全主页模式：不会自动执行 BBR；请选择菜单项后再确认。"
+  warn "--all 将执行完整流程：TCP 调优 + Argo VMess+WS 节点生成。"
+  force_all
+}
+
+run_menu() {
+  render_header_once
   menu_body
 }
 
@@ -1871,8 +1876,9 @@ Commands:
   --optimize             单独执行 TCP 调优流程：BBR/XanMod/容器降级 + 网络参数
   --argo                 单独执行 Argo VMess+WS 节点流程（等同 --install-argo-vmess）
   --install-argo-vmess   单独安装/重装 Argo VMess+WS，并生成节点/订阅 URL
-  --all                  显示交互主页（安全默认，不直接修改系统）
-  --force-all            完整流程：TCP 调优 + Argo 节点；如需重启，重启后执行 speed 继续
+  --all                  完整流程：TCP 调优 + Argo 节点；如需重启，重启后执行 speed 继续
+  --force-all            等同 --all
+  --menu                 只打开交互控制台，不自动执行流程
   --continue             重启后继续：TCP 网络调优 + Argo VMess + WS
   --show-url             查看已生成的节点/订阅信息
   --uninstall-argo       卸载 Argo VMess + WS 相关服务
@@ -2047,6 +2053,7 @@ case "${1:-}" in
   --install-argo-vmess) install_argo_vmess_ws ;;
   --all) run_all ;;
   --force-all) force_all ;;
+  --menu) run_menu ;;
   --continue) continue_after_reboot ;;
   --show-url) show_argo_vmess_ws_info ;;
   --uninstall-argo) uninstall_argo_vmess_ws ;;
