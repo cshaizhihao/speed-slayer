@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.1.0"
+SPEED_SLAYER_VERSION="v1.1.1"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -2000,17 +2000,20 @@ menu_body() {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  『Speed Slayer 控制台』
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. TCP 调优流程            2. Argo 节点流程
-  3. 完整流程 TCP+Argo       4. 诊断与日志
-  5. 修复/清理/卸载         6. 更新
+  1. ⚡ Speed Slayer TCP+Argo
+  2. 🚀 一键TCP调优
+  3. 🌐 一键Vmess+Argo 节点生成
+  4. 🩺 诊断与日志
+  5. 🧰 修复/清理/卸载
+  6. 🔄 更新
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
   read -r -p "请输入选择: " choice
   case "$choice" in
-    1) menu_section_tcp ;;
-    2) menu_section_node ;;
-    3) force_all ;;
+    1) force_all ;;
+    2) menu_section_tcp ;;
+    3) menu_section_node ;;
     4) menu_section_diag ;;
     5) menu_section_repair ;;
     6) menu_section_system ;;
