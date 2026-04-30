@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.4"
+SPEED_SLAYER_VERSION="v1.0.5"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1608,6 +1608,62 @@ repair_install() {
   install_argo_vmess_ws
 }
 
+
+uninstall_speed_slayer() {
+  render_header_once
+  require_root
+  section "🗑️ Speed Slayer · 删除/卸载"
+  warn "此操作会移除 Speed Slayer 安装的快捷命令、续跑状态、Argo/Xray/Nginx 配置、TCP sysctl 配置与 systemd 残留。"
+  warn "不会卸载 XanMod 内核本身，避免误删系统内核；如需回退内核，请在系统启动项/包管理器中单独处理。"
+  if ! confirm_action "确认删除 Speed Slayer 相关内容？默认回车 = Y"; then
+    warn "已取消删除。"
+    return 0
+  fi
+
+  local ts
+  ts="$(date +%Y%m%d%H%M%S)"
+
+  progress_step 15 "停止并移除 Argo / Xray 服务"
+  systemctl stop argo xray >/dev/null 2>&1 || true
+  systemctl disable argo xray >/dev/null 2>&1 || true
+  pkill -f '/etc/argox/cloudflared' >/dev/null 2>&1 || true
+  pkill -f '/etc/argox/xray' >/dev/null 2>&1 || true
+  pkill -f 'nginx.*argox/nginx.conf' >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/argo.service /etc/systemd/system/xray.service
+
+  progress_step 35 "备份并清理节点配置"
+  if [ -d /etc/argox ]; then
+    mv /etc/argox "/etc/argox.bak.${ts}" 2>/dev/null || rm -rf /etc/argox
+    success "已备份 /etc/argox -> /etc/argox.bak.${ts}"
+  fi
+
+  progress_step 55 "清理 Speed Slayer TCP / DNS / IPv6 配置"
+  rm -f /etc/sysctl.d/99-speed-slayer-tcp.conf
+  rm -f /etc/sysctl.d/99-speed-slayer-disable-ipv6.conf
+  rm -f /etc/modules-load.d/99-speed-slayer-bbr.conf
+  rm -f /etc/systemd/system.conf.d/99-speed-slayer-limits.conf
+  rm -f /etc/systemd/user.conf.d/99-speed-slayer-limits.conf
+  rm -f /etc/systemd/resolved.conf.d/99-speed-slayer-dns.conf
+  sysctl --system >/dev/null 2>&1 || true
+
+  progress_step 75 "清理续跑状态与工作目录"
+  rm -f "$STATE_FILE"
+  if [ -d "$WORK_DIR" ]; then
+    mv "$WORK_DIR" "${WORK_DIR}.bak.${ts}" 2>/dev/null || rm -rf "$WORK_DIR"
+    success "已备份 $WORK_DIR -> ${WORK_DIR}.bak.${ts}"
+  fi
+
+  progress_step 90 "移除 speed 快捷命令"
+  rm -f "$INSTALLED_BIN" "$INSTALLED_BIN.tmp"
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl daemon-reexec >/dev/null 2>&1 || true
+  systemctl restart systemd-resolved >/dev/null 2>&1 || true
+
+  progress_step 100 "删除完成"
+  success "Speed Slayer 已删除。保留的 .bak 目录可用于排障回溯。"
+  echo "如需重新安装，请重新执行 GitHub 安装命令。"
+}
+
 doctor_check() {
   local label="$1" cmd="$2" fix="${3:-}"
   if eval "$cmd" >/dev/null 2>&1; then
@@ -1695,6 +1751,7 @@ Commands:
   --doctor               一键诊断：环境检测 + 结果摘要 + 健康检查
   --logs [type]          查看日志：install/kernel/tcp/argo/xray
   --repair               清理残留并重装 Argo VMess+WS
+  --uninstall            删除 Speed Slayer 相关服务、配置、状态和 speed 命令
   --speedtest            执行 Ookla Speedtest 测速
   --netcheck             检查 DNS / GitHub / Cloudflare / 出站连通性
   --update-self          更新 /usr/local/bin/speed 到 GitHub 最新版本
@@ -1786,16 +1843,18 @@ EOF
 }
 
 menu_section_system() {
-  section "Speed Slayer · 更新"
+  section "Speed Slayer · 更新 / 删除"
   cat <<'EOF'
 1. 安装 speed 快捷命令
 2. 更新 speed 自身
+3. 删除 / 卸载 Speed Slayer
 0. 返回主页
 EOF
   read -r -p "请选择: " choice
   case "$choice" in
     1) install_shortcut ;;
     2) update_self ;;
+    3) uninstall_speed_slayer ;;
     0) menu_body ;;
     *) err "无效选择"; return 1 ;;
   esac
@@ -1861,6 +1920,7 @@ case "${1:-}" in
   --doctor) doctor ;;
   --logs) show_logs "${2:-menu}" ;;
   --repair) repair_install ;;
+  --uninstall) uninstall_speed_slayer ;;
   --speedtest) run_speedtest_cmd ;;
   --netcheck) run_netcheck ;;
   --update-self) update_self ;;
