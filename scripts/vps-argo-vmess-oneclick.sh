@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.13"
+SPEED_SLAYER_VERSION="v1.0.14"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -310,6 +310,21 @@ select_xanmod_pkg() {
       return 0
     fi
   done
+
+  # Fallback: parse apt-cache search output. Some mirrors expose packages in search
+  # but apt-cache policy may not report Candidate as expected in minimal images.
+  local available
+  available="$(apt-cache search '^linux-xanmod' 2>/dev/null | awk '{print $1}')"
+  echo "[XanMod PKG] apt search available: $(echo "$available" | tr '
+' ' ')" >>"$WORK_DIR/kernel-install.log"
+  for pkg in "${candidates[@]}"; do
+    if echo "$available" | grep -qx "$pkg"; then
+      echo "[XanMod PKG] selected from search fallback: $pkg" >>"$WORK_DIR/kernel-install.log"
+      echo "$pkg"
+      return 0
+    fi
+  done
+
   echo "[XanMod PKG] no candidate package found" >>"$WORK_DIR/kernel-install.log"
   return 1
 }
@@ -406,6 +421,7 @@ native_install_xanmod_kernel() {
     echo "可用包候选："
     show_xanmod_candidates
     echo "日志：$WORK_DIR/kernel-install.log"
+    echo "建议确认已更新到最新版：speed --update-self && speed --version"
     return 1
   fi
   info "CPU 等级：x86-64-v${level}；选择内核包：${pkg}"
