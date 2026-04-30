@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.9"
+SPEED_SLAYER_VERSION="v1.0.10"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -546,6 +546,10 @@ detect_bandwidth_profile() {
       BANDWIDTH_MBPS="$measured"
       BANDWIDTH_SOURCE="measured"
       BANDWIDTH_NOTE="Ookla Speedtest Upload 实测${SPEEDTEST_SERVER:+ · $SPEEDTEST_SERVER}"
+      local measured_color
+      measured_color="$(bandwidth_color "$measured")"
+      printf "%b✓ Speedtest%b 上传带宽：%b%s Mbps%b%s
+" "$C_GREEN" "$C_RESET" "$measured_color" "$measured" "$C_RESET" "${SPEEDTEST_SERVER:+ · Server: $SPEEDTEST_SERVER}"
       return 0
     fi
     BANDWIDTH_NOTE="Speedtest 未成功，已回退默认值；日志：$WORK_DIR/speedtest.log"
@@ -689,9 +693,10 @@ native_speed_tcp_tune() {
   buffer_bytes=$((buffer_mb * 1024 * 1024))
   local bw_color
   bw_color="$(bandwidth_color "$bandwidth")"
-  printf "Bandwidth=%b%sMbps%b Source=%s Buffer=%sMB Policy=%s
-" "$bw_color" "$bandwidth" "$C_RESET" "$BANDWIDTH_SOURCE" "$buffer_mb" "${TCP_BUFFER_REASON:-bandwidth-tier}"
-  [ -n "$BANDWIDTH_NOTE" ] && echo "BandwidthNote=${BANDWIDTH_NOTE}"
+  printf "%b➜ TCP Profile%b Bandwidth=%b%sMbps%b Source=%s Buffer=%sMB Policy=%s
+" "$C_CYAN" "$C_RESET" "$bw_color" "$bandwidth" "$C_RESET" "$BANDWIDTH_SOURCE" "$buffer_mb" "${TCP_BUFFER_REASON:-bandwidth-tier}"
+  [ -n "$BANDWIDTH_NOTE" ] && printf "%b• BandwidthNote%b %s
+" "$C_DIM" "$C_RESET" "$BANDWIDTH_NOTE"
 
   progress_step 34 "[步骤 3/6] 清理配置冲突"
   clean_tcp_conflicts
