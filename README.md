@@ -35,7 +35,13 @@
 ## 快速开始
 
 ```bash
-curl -fsSL -H "Accept: application/vnd.github.raw" -H "Cache-Control: no-cache" "https://api.github.com/repos/cshaizhihao/speed-slayer/contents/scripts/vps-argo-vmess-oneclick.sh?ref=main&ts=$(date +%s)" -o /tmp/speed && bash /tmp/speed --all
+bash <(curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh) --all
+```
+
+如果你的环境不支持 `<(...)`，使用兼容写法：
+
+```bash
+curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh -o /tmp/speed-install && bash /tmp/speed-install --all
 ```
 
 首次运行 `--all` 会进入安全主页，不会立即修改系统。选择完整流程后，脚本会按阶段执行，并在关键操作前给出确认。

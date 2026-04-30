@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.7"
+SPEED_SLAYER_VERSION="v1.0.9"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1686,7 +1686,12 @@ uninstall_speed_slayer() {
 
   progress_step 100 "删除完成"
   success "Speed Slayer 已删除。保留的 .bak 目录可用于排障回溯。"
-  echo "如需重新安装，请重新执行 GitHub 安装命令。"
+  echo ""
+  echo "如需继续安装，请执行："
+  echo "  bash <(curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh) --all"
+  echo ""
+  echo "如果环境不支持 <(...)，请执行："
+  echo "  curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh -o /tmp/speed-install && bash /tmp/speed-install --all"
 }
 
 doctor_check() {
