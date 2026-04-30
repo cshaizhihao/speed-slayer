@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v2.0.2"
+SPEED_SLAYER_VERSION="v2.0.3"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1893,7 +1893,7 @@ Commands:
   --all                  完整流程：TCP 调优 + Argo 节点；如需重启，重启后执行 speed 继续
   --force-all            等同 --all
   --menu                 只打开交互控制台，不自动执行流程
-  --continue             重启后继续：TCP 网络调优 + Argo VMess + WS
+  --continue             自动续跑：TCP 网络调优 + Argo VMess + WS
   --show-url             查看已生成的节点/订阅信息
   --uninstall-argo       卸载 Argo VMess + WS 相关服务
   --clean-argo           清理现有 Argo 配置，备份 /etc/argox 后重装 VMess+WS
@@ -2052,11 +2052,12 @@ default_action() {
   check_self_update_hint
   require_root
   if [ -s "$STATE_FILE" ]; then
-    info "检测到续跑状态，自动继续完整流程。"
-    continue_after_reboot
-  else
-    menu
+    warn "检测到未完成的续跑状态。"
+    echo "可直接选择 1 继续 Speed Slayer TCP+Argo，或执行 speed --continue 自动续跑。"
+    echo "如需取消续跑状态：speed --clear-state"
+    echo ""
   fi
+  menu
 }
 
 case "${1:-}" in
