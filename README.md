@@ -46,6 +46,38 @@
 
 ---
 
+## 前置依赖
+
+Speed Slayer 是 Bash 脚本。新机器至少需要具备：
+
+- `bash`
+- `curl` 或 `wget`
+- `ca-certificates`
+- `sudo` 或 root 权限
+
+Debian / Ubuntu 最小化系统可先执行：
+
+```bash
+apt update && apt install -y bash curl wget ca-certificates
+```
+
+如果当前不是 root，请先切换：
+
+```bash
+sudo -i
+```
+
+确认基础命令存在：
+
+```bash
+bash --version
+curl --version
+```
+
+然后再执行下面的 Speed Slayer 安装命令。
+
+---
+
 ## 快速开始
 
 ### 进入主菜单
