@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v2.0.4"
+SPEED_SLAYER_VERSION="v2.0.5"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -2052,6 +2052,7 @@ default_action() {
   render_header_once
   check_self_update_hint
   require_root
+  install_shortcut || true
   if [ -s "$STATE_FILE" ]; then
     warn "检测到未完成的续跑状态。"
     echo "可直接选择 1 继续 Speed Slayer TCP+Argo，或执行 speed --continue 自动续跑。"
