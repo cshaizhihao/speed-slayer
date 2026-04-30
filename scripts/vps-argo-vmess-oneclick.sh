@@ -558,25 +558,29 @@ detect_bandwidth_profile() {
 }
 
 calculate_tcp_buffer_mb() {
-  local bandwidth="$1" mem_mb="$2" region="${SPEED_REGION:-global}" buffer=128 cap
-  if [ "$bandwidth" -le 200 ] 2>/dev/null; then buffer=32
-  elif [ "$bandwidth" -le 500 ] 2>/dev/null; then buffer=64
-  elif [ "$bandwidth" -le 1000 ] 2>/dev/null; then buffer=128
-  elif [ "$bandwidth" -le 2500 ] 2>/dev/null; then buffer=256
-  elif [ "$bandwidth" -le 5000 ] 2>/dev/null; then buffer=384
-  else buffer=512
+  local bandwidth="$1" mem_mb="$2" buffer=32 cap reason=""
+
+  # Speed Slayer v1.0.1 strategy: bandwidth-tiered TCP buffer.
+  # Keep it explainable and conservative; avoid giant buffers causing memory pressure/bufferbloat.
+  if ! [[ "$bandwidth" =~ ^[0-9]+$ ]] || [ "$bandwidth" -le 0 ] 2>/dev/null; then
+    bandwidth=500
   fi
-  case "$region" in
-    asia|local) : ;;
-    *) buffer=$((buffer + buffer / 2)) ;;
-  esac
-  if [ "$mem_mb" -lt 1024 ] 2>/dev/null; then cap=32
-  elif [ "$mem_mb" -lt 2048 ] 2>/dev/null; then cap=64
-  elif [ "$mem_mb" -lt 4096 ] 2>/dev/null; then cap=128
-  elif [ "$mem_mb" -lt 8192 ] 2>/dev/null; then cap=256
-  else cap=512
+
+  if [ "$bandwidth" -le 100 ] 2>/dev/null; then buffer=16
+  elif [ "$bandwidth" -le 500 ] 2>/dev/null; then buffer=32
+  elif [ "$bandwidth" -le 1000 ] 2>/dev/null; then buffer=64
+  elif [ "$bandwidth" -le 2500 ] 2>/dev/null; then buffer=128
+  else buffer=256
+  fi
+
+  # Small-memory guardrail.
+  if [ "$mem_mb" -lt 1024 ] 2>/dev/null; then cap=16; reason="<1GB RAM cap"
+  elif [ "$mem_mb" -lt 2048 ] 2>/dev/null; then cap=32; reason="<2GB RAM cap"
+  elif [ "$mem_mb" -lt 4096 ] 2>/dev/null; then cap=128; reason="<4GB RAM cap"
+  else cap=256
   fi
   [ "$buffer" -gt "$cap" ] && buffer="$cap"
+  [ -n "$reason" ] && TCP_BUFFER_REASON="$reason" || TCP_BUFFER_REASON="bandwidth-tier"
   echo "$buffer"
 }
 
@@ -631,8 +635,8 @@ native_speed_tcp_tune() {
   buffer_bytes=$((buffer_mb * 1024 * 1024))
   local bw_color
   bw_color="$(bandwidth_color "$bandwidth")"
-  printf "Bandwidth=%b%sMbps%b Source=%s Region=%s Buffer=%sMB
-" "$bw_color" "$bandwidth" "$C_RESET" "$BANDWIDTH_SOURCE" "$region" "$buffer_mb"
+  printf "Bandwidth=%b%sMbps%b Source=%s Buffer=%sMB Policy=%s
+" "$bw_color" "$bandwidth" "$C_RESET" "$BANDWIDTH_SOURCE" "$buffer_mb" "${TCP_BUFFER_REASON:-bandwidth-tier}"
   [ -n "$BANDWIDTH_NOTE" ] && echo "BandwidthNote=${BANDWIDTH_NOTE}"
 
   progress_step 34 "[步骤 3/6] 清理配置冲突"
@@ -646,7 +650,7 @@ EOF
   cat > /etc/sysctl.d/99-speed-slayer-tcp.conf <<EOF
 # Speed Slayer native TCP profile
 # Generated on $(date)
-# Bandwidth: ${bandwidth} Mbps | Region: ${region} | Memory: ${mem_mb} MB | Buffer: ${buffer_mb} MB
+# Bandwidth: ${bandwidth} Mbps | Memory: ${mem_mb} MB | Buffer: ${buffer_mb} MB | Policy: ${TCP_BUFFER_REASON:-bandwidth-tier}
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.ipv4.tcp_fastopen = 3
