@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.3"
+SPEED_SLAYER_VERSION="v1.0.4"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -158,7 +158,7 @@ cdn_recommendation() {
 " "$C_BOLD$C_YELLOW" " 推荐下一步：本地优选 Cloudflare CDN" "$C_RESET"
   printf "  节点已经生成，建议继续在本地运行 %bCloudflareSpeedTest%b，选择延迟更低、速度更稳的 CDN IP。
 " "$C_GREEN" "$C_RESET"
-  printf "  项目地址：%bhttps://github.com/XIU2/CloudflareSpeedTest/releases%b
+  printf "  项目地址：%bhttps://github.com/XIU2/CloudflareSpeedTest%b
 " "$C_UNDERLINE$C_CYAN" "$C_RESET"
   line
 }
@@ -752,12 +752,16 @@ EOF
     echo "$sysctl_output" | grep -iE 'error|invalid|unknown|cannot|permission' | head -6 || true
   fi
 
-  progress_step 76 "应用 FQ 队列与持久化限制"
-  local dev
+  progress_step 76 "⚙️ 应用 FQ 队列与持久化限制"
+  local dev fq_ok=0 fq_total=0
   for dev in $(ls /sys/class/net 2>/dev/null | grep -vE '^(lo|docker|veth|br-|virbr|tun|tap)'); do
+    fq_total=$((fq_total + 1))
     tc qdisc replace dev "$dev" root fq >/dev/null 2>&1 || true
-    printf "qdisc[%b%s%b]=%b%s%b\n" "$C_YELLOW" "$dev" "$C_RESET" "$C_CYAN" "$(tc qdisc show dev "$dev" 2>/dev/null | head -1 || true)" "$C_RESET"
+    if tc qdisc show dev "$dev" 2>/dev/null | grep -q '^qdisc fq'; then
+      fq_ok=$((fq_ok + 1))
+    fi
   done
+  printf "%b✓ FQ 队列%b 已应用：%s/%s 个网卡；详细状态可用 %sspeed --tcp-status%s 查看。\n" "$C_GREEN" "$C_RESET" "$fq_ok" "$fq_total" "$C_CYAN" "$C_RESET"
   if ! grep -q 'Speed Slayer file descriptor limits' /etc/security/limits.conf 2>/dev/null; then
     cat >> /etc/security/limits.conf <<'EOF'
 # Speed Slayer file descriptor limits
@@ -1394,56 +1398,65 @@ port_state() {
 
 health_check() {
   require_root
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo " Speed Slayer · 健康检查"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  section "🩺 Speed Slayer · 健康检查"
 
   local fail=0
-  local argo_state xray_state nginx_state nginx_port argo_domain
+  local argo_state xray_state nginx_state nginx_port argo_domain port_status port_owner_text
   argo_state="$(service_state argo)"
   xray_state="$(service_state xray)"
   nginx_state="$(service_state nginx)"
   nginx_port="$(awk -F= '/^NGINX_PORT=/{print $2}' "$CONFIG_FILE" 2>/dev/null | tr -d "'\"")"
   nginx_port="${nginx_port:-8001}"
+  port_status="$(port_state "$nginx_port")"
+  port_owner_text="$(port_owner "$nginx_port")"
 
-  printf "%-18s %s\n" "argo.service:" "$argo_state"
-  printf "%-18s %s\n" "xray.service:" "$xray_state"
-  printf "%-18s %s\n" "nginx.service:" "$nginx_state"
-  printf "%-18s %s (%s)\n" "本地入口端口:" "$nginx_port" "$(port_state "$nginx_port")"
-  [ "$(port_state "$nginx_port")" != "listening" ] || echo "端口占用: $(port_owner "$nginx_port")"
+  status_row() {
+    local label="$1" value="$2" good="$3"
+    if [ "$good" = "1" ]; then
+      printf "  %b✓ %-16s%b %b%s%b\n" "$C_GREEN" "$label" "$C_RESET" "$C_GREEN" "$value" "$C_RESET"
+    else
+      printf "  %b✗ %-16s%b %b%s%b\n" "$C_RED" "$label" "$C_RESET" "$C_RED" "$value" "$C_RESET"
+    fi
+  }
+
+  status_row "Argo 服务" "$argo_state" "$([ "$argo_state" = "running" ] && echo 1 || echo 0)"
+  status_row "Xray 服务" "$xray_state" "$([ "$xray_state" = "running" ] && echo 1 || echo 0)"
+  status_row "Nginx 服务" "$nginx_state" "$([ "$nginx_state" = "running" ] && echo 1 || echo 0)"
+  status_row "本地入口" "${nginx_port} / ${port_status}" "$([ "$port_status" = "listening" ] && echo 1 || echo 0)"
+  [ "$port_status" != "listening" ] || printf "  %b• 端口占用%b %s\n" "$C_DIM" "$C_RESET" "$port_owner_text"
 
   [ "$argo_state" = "running" ] || fail=1
   [ "$xray_state" = "running" ] || fail=1
-  [ "$(port_state "$nginx_port")" = "listening" ] || fail=1
+  [ "$port_status" = "listening" ] || fail=1
 
   if [ -s /etc/argox/list ]; then
-    echo "节点列表: FOUND /etc/argox/list"
+    status_row "节点列表" "FOUND /etc/argox/list" 1
     argo_domain="$(grep -Eo 'https?://[^/ ]+' /etc/argox/list | sed 's#https\?://##' | grep -E 'trycloudflare\.com|cloudflare|\.' | head -n1 || true)"
-    [ -n "$argo_domain" ] && echo "Argo 域名: $argo_domain" || echo "Argo 域名: 未能从节点列表提取"
+    [ -n "$argo_domain" ] && printf "  %b• Argo 域名%b %s\n" "$C_CYAN" "$C_RESET" "$argo_domain" || printf "  %b• Argo 域名%b 未能从节点列表提取\n" "$C_YELLOW" "$C_RESET"
   else
-    echo "节点列表: MISSING /etc/argox/list"
+    status_row "节点列表" "MISSING /etc/argox/list" 0
     fail=1
   fi
 
   if [ -s /etc/argox/subscribe/base64 ]; then
-    echo "Base64订阅: FOUND"
+    status_row "Base64订阅" "FOUND" 1
   else
-    echo "Base64订阅: MISSING"
+    status_row "Base64订阅" "MISSING" 0
     fail=1
   fi
 
   echo ""
   if [ "$fail" -eq 0 ]; then
-    success "健康检查通过：Argo / Xray / 本地入口 / 订阅文件均可用"
+    success "🎉 健康检查通过：Argo / Xray / 本地入口 / 订阅文件均可用"
     return 0
   fi
 
-  warn "健康检查未完全通过，建议按以下方向排查："
-  [ "$argo_state" = "running" ] || echo "- Argo 未运行：执行 systemctl status argo 或重新运行 --install-argo-vmess"
-  [ "$xray_state" = "running" ] || echo "- Xray 未运行：执行 systemctl status xray，检查 /etc/argox/xray.log"
-  [ "$(port_state "$nginx_port")" = "listening" ] || echo "- 本地入口端口未监听：检查 nginx 配置或端口占用 ss -lntp | grep $nginx_port"
-  [ -s /etc/argox/list ] || echo "- 节点列表未生成：查看 $LOG_FILE，确认 Argo 是否拿到隧道域名"
-  [ -s /etc/argox/subscribe/base64 ] || echo "- 订阅文件缺失：重新执行 --show-url 或 --install-argo-vmess"
+  warn "⚠️ 健康检查未完全通过，建议按以下方向排查："
+  [ "$argo_state" = "running" ] || printf "  %b•%b Argo 未运行：systemctl status argo 或重新运行 --install-argo-vmess\n" "$C_YELLOW" "$C_RESET"
+  [ "$xray_state" = "running" ] || printf "  %b•%b Xray 未运行：systemctl status xray，检查 /etc/argox/xray.log\n" "$C_YELLOW" "$C_RESET"
+  [ "$port_status" = "listening" ] || printf "  %b•%b 本地入口端口未监听：检查 nginx 配置或端口占用 ss -lntp | grep %s\n" "$C_YELLOW" "$C_RESET" "$nginx_port"
+  [ -s /etc/argox/list ] || printf "  %b•%b 节点列表未生成：查看 %s，确认 Argo 是否拿到隧道域名\n" "$C_YELLOW" "$C_RESET" "$LOG_FILE"
+  [ -s /etc/argox/subscribe/base64 ] || printf "  %b•%b 订阅文件缺失：重新执行 --show-url 或 --install-argo-vmess\n" "$C_YELLOW" "$C_RESET"
   return 1
 }
 
