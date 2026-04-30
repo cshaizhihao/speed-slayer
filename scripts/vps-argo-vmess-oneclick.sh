@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.12"
+SPEED_SLAYER_VERSION="v1.0.13"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -288,18 +288,29 @@ xanmod_pkg_available() {
 }
 
 select_xanmod_pkg() {
-  local level="$1" n pkg candidates=()
-  for n in "$level" 3 2 1; do
-    [ "$n" -gt "$level" ] 2>/dev/null && continue
-    candidates+=("linux-xanmod-x64v${n}")
+  local level="$1" n pkg flavor candidates=()
+
+  # Prefer stable mainline, then LTS, then edge. Never pick RT by default.
+  # Some distributions/repos only expose lts-x64v1 for old CPU levels, so include safe downgrade candidates.
+  for flavor in "linux-xanmod-x64v" "linux-xanmod-lts-x64v" "linux-xanmod-edge-x64v"; do
+    for n in "$level" 4 3 2 1; do
+      [ "$n" -gt "$level" ] 2>/dev/null && continue
+      candidates+=("${flavor}${n}")
+    done
   done
   candidates+=("linux-xanmod")
+
+  echo "[XanMod PKG] CPU level: x86-64-v${level}" >>"$WORK_DIR/kernel-install.log"
+  echo "[XanMod PKG] candidates: ${candidates[*]}" >>"$WORK_DIR/kernel-install.log"
+
   for pkg in "${candidates[@]}"; do
     if xanmod_pkg_available "$pkg"; then
+      echo "[XanMod PKG] selected: $pkg" >>"$WORK_DIR/kernel-install.log"
       echo "$pkg"
       return 0
     fi
   done
+  echo "[XanMod PKG] no candidate package found" >>"$WORK_DIR/kernel-install.log"
   return 1
 }
 
