@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.11"
+SPEED_SLAYER_VERSION="v1.0.12"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -326,7 +326,7 @@ native_install_xanmod_kernel() {
 
   progress_step 10 "安装依赖：wget / gnupg / ca-certificates"
   apt-get update -y >>"$WORK_DIR/kernel-install.log" 2>&1 || true
-  apt-get install -y wget gnupg ca-certificates >>"$WORK_DIR/kernel-install.log" 2>&1
+  apt-get install -y curl wget gnupg ca-certificates lsb-release >>"$WORK_DIR/kernel-install.log" 2>&1
 
   progress_step 25 "导入 XanMod GPG key"
   local keyring="/usr/share/keyrings/xanmod-archive-keyring.gpg"
@@ -334,24 +334,34 @@ native_install_xanmod_kernel() {
   key_tmp="$(mktemp)"
   : > "$key_tmp"
   echo "[XanMod GPG] start $(date -Is 2>/dev/null || date)" >>"$WORK_DIR/kernel-install.log"
-  for key_url in     "https://dl.xanmod.org/archive.key"     "https://raw.githubusercontent.com/xanmod/linux/main/gpg.key"; do
+  for key_url in "https://dl.xanmod.org/archive.key"; do
     echo "[XanMod GPG] try: $key_url" >>"$WORK_DIR/kernel-install.log"
     if command -v curl >/dev/null 2>&1; then
-      if curl -fL --connect-timeout 10 --max-time 30 --retry 2 "$key_url" -o "$key_tmp" >>"$WORK_DIR/kernel-install.log" 2>&1; then
+      # Cloudflare may challenge HEAD/odd clients; use normal GET, HTTP/1.1, browser UA, and retry IPv4 if needed.
+      if curl -fL --http1.1 -A "Mozilla/5.0 Speed-Slayer" --connect-timeout 10 --max-time 30 --retry 2 "$key_url" -o "$key_tmp" >>"$WORK_DIR/kernel-install.log" 2>&1 || \
+         curl -4 -fL --http1.1 -A "Mozilla/5.0 Speed-Slayer" --connect-timeout 10 --max-time 30 --retry 2 "$key_url" -o "$key_tmp" >>"$WORK_DIR/kernel-install.log" 2>&1; then
         if grep -q "BEGIN PGP PUBLIC KEY BLOCK" "$key_tmp" 2>/dev/null; then
           key_ok=1
           break
         fi
-        echo "[XanMod GPG] downloaded content is not an ASCII armored PGP key" >>"$WORK_DIR/kernel-install.log"
+        if grep -qiE "cf-mitigated|challenge|cloudflare|Just a moment" "$key_tmp" 2>/dev/null; then
+          echo "[XanMod GPG] Cloudflare challenge page detected" >>"$WORK_DIR/kernel-install.log"
+        else
+          echo "[XanMod GPG] downloaded content is not an ASCII armored PGP key" >>"$WORK_DIR/kernel-install.log"
+        fi
       fi
     fi
     if command -v wget >/dev/null 2>&1; then
-      if wget --timeout=30 --tries=2 -O "$key_tmp" "$key_url" >>"$WORK_DIR/kernel-install.log" 2>&1; then
+      if wget --user-agent="Mozilla/5.0 Speed-Slayer" --timeout=30 --tries=2 -O "$key_tmp" "$key_url" >>"$WORK_DIR/kernel-install.log" 2>&1; then
         if grep -q "BEGIN PGP PUBLIC KEY BLOCK" "$key_tmp" 2>/dev/null; then
           key_ok=1
           break
         fi
-        echo "[XanMod GPG] downloaded content is not an ASCII armored PGP key" >>"$WORK_DIR/kernel-install.log"
+        if grep -qiE "cf-mitigated|challenge|cloudflare|Just a moment" "$key_tmp" 2>/dev/null; then
+          echo "[XanMod GPG] Cloudflare challenge page detected" >>"$WORK_DIR/kernel-install.log"
+        else
+          echo "[XanMod GPG] downloaded content is not an ASCII armored PGP key" >>"$WORK_DIR/kernel-install.log"
+        fi
       fi
     fi
   done
@@ -370,7 +380,11 @@ native_install_xanmod_kernel() {
 
   progress_step 40 "写入临时 XanMod APT 源"
   local repo_file="/etc/apt/sources.list.d/xanmod-release.list"
-  echo "deb [signed-by=${keyring}] https://deb.xanmod.org releases main" > "$repo_file"
+  local distro_codename="${VERSION_CODENAME:-}"
+  [ -z "$distro_codename" ] && distro_codename="$(lsb_release -sc 2>/dev/null || true)"
+  [ -z "$distro_codename" ] && distro_codename="bookworm"
+  echo "deb [signed-by=${keyring}] http://deb.xanmod.org ${distro_codename} main" > "$repo_file"
+  echo "[XanMod APT] repo codename: ${distro_codename}" >>"$WORK_DIR/kernel-install.log"
 
   progress_step 55 "检测 CPU x86-64-v 等级"
   local level pkg install_ok=0
