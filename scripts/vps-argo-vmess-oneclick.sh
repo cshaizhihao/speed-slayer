@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.2"
+SPEED_SLAYER_VERSION="v1.0.3"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -628,8 +628,8 @@ select_tcp_buffer_mb() {
   echo "" >&2
   echo "提示：缓存不是越大越好；高并发或小内存机器过大可能增加内存压力。" >&2
 
-  if [ "${ASSUME_Y:-0}" = "1" ] || [ ! -t 0 ]; then
-    echo "AutoMode=1，自动使用推荐值 ${recommended}MB" >&2
+  if [ ! -t 0 ]; then
+    echo "非交互环境，自动使用推荐值 ${recommended}MB" >&2
     echo "$recommended"
     return 0
   fi
