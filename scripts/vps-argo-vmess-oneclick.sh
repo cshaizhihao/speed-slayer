@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v1.0.16"
+SPEED_SLAYER_VERSION="v1.1.0"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -1867,10 +1867,12 @@ Usage:
 
 Commands:
   --tcp-status           查看 TCP / BBR / 内核状态
-  --optimize             执行全自动 TCP 优化：BBR v3 + 网络调优
-  --install-argo-vmess   安装/重装 Argo VMess + WS，并生成节点/订阅 URL
+  --tcp                  单独执行 TCP 调优流程（等同 --optimize）
+  --optimize             单独执行 TCP 调优流程：BBR/XanMod/容器降级 + 网络参数
+  --argo                 单独执行 Argo VMess+WS 节点流程（等同 --install-argo-vmess）
+  --install-argo-vmess   单独安装/重装 Argo VMess+WS，并生成节点/订阅 URL
   --all                  显示交互主页（安全默认，不直接修改系统）
-  --force-all            无人值守完整流程；如需重启，重启后执行 speed 即可继续
+  --force-all            完整流程：TCP 调优 + Argo 节点；如需重启，重启后执行 speed 继续
   --continue             重启后继续：TCP 网络调优 + Argo VMess + WS
   --show-url             查看已生成的节点/订阅信息
   --uninstall-argo       卸载 Argo VMess + WS 相关服务
@@ -1998,17 +2000,17 @@ menu_body() {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  『Speed Slayer 控制台』
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. 一键执行完整流程        2. 节点管理
-  3. TCP 加速                4. 诊断与日志
+  1. TCP 调优流程            2. Argo 节点流程
+  3. 完整流程 TCP+Argo       4. 诊断与日志
   5. 修复/清理/卸载         6. 更新
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
   read -r -p "请输入选择: " choice
   case "$choice" in
-    1) force_all ;;
+    1) menu_section_tcp ;;
     2) menu_section_node ;;
-    3) menu_section_tcp ;;
+    3) force_all ;;
     4) menu_section_diag ;;
     5) menu_section_repair ;;
     6) menu_section_system ;;
@@ -2036,7 +2038,9 @@ default_action() {
 
 case "${1:-}" in
   --tcp-status) tcp_status_panel ;;
+  --tcp) run_tcp_optimize ;;
   --optimize) run_tcp_optimize ;;
+  --argo) install_argo_vmess_ws ;;
   --install-argo-vmess) install_argo_vmess_ws ;;
   --all) run_all ;;
   --force-all) force_all ;;

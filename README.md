@@ -46,6 +46,27 @@ curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh -o /t
 
 首次运行 `--all` 会进入安全主页，不会立即修改系统。选择完整流程后，脚本会按阶段执行，并在关键操作前给出确认。
 
+## 分流程运行
+
+只做 TCP 调优：
+
+```bash
+bash <(curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh) --tcp
+```
+
+只部署 Argo VMess+WS 节点：
+
+```bash
+bash <(curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh) --argo
+```
+
+完整流程（TCP 调优 + Argo 节点）：
+
+```bash
+bash <(curl -fsSL https://github.com/cshaizhihao/speed-slayer/raw/main/install.sh) --all
+```
+
+
 安装快捷命令后，后续直接输入：
 
 ```bash
