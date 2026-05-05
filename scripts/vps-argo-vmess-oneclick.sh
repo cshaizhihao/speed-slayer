@@ -7,7 +7,7 @@ set -euo pipefail
 # - Argo VMess+WS: native cloudflared + Xray + Nginx implementation, no ArgoX install chain.
 
 REPO_RAW_BASE="https://raw.githubusercontent.com/cshaizhihao/speed-slayer/main"
-SPEED_SLAYER_VERSION="v2.0.7"
+SPEED_SLAYER_VERSION="v2.0.8"
 PROJECT_URL="https://github.com/cshaizhihao/speed-slayer"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo .)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd 2>/dev/null || echo .)"
@@ -24,7 +24,7 @@ INSTALLED_BIN="/usr/local/bin/speed"
 DEFAULT_START_PORT="30000"
 DEFAULT_NGINX_PORT="8001"
 DEFAULT_WS_PATH="argox"
-DEFAULT_NODE_NAME="VPS-Argo-VMess"
+DEFAULT_NODE_NAME="Speed-Slayer"
 
 if [ -t 1 ]; then
   C_RESET='\033[0m'; C_BOLD='\033[1m'; C_DIM='\033[2m'; C_UNDERLINE='\033[4m'
@@ -526,6 +526,72 @@ detect_memory_mb() {
   free -m 2>/dev/null | awk '/^Mem:/ {print $2+0}'
 }
 
+public_ipv4() {
+  curl -4fsS --max-time 6 https://api.ipify.org 2>/dev/null || \
+    curl -4fsS --max-time 6 https://ifconfig.co/ip 2>/dev/null || true
+}
+
+detect_ip_country_code() {
+  local ip="${1:-}" cc=""
+  [ -n "$ip" ] || ip="$(public_ipv4)"
+  if [ -n "$ip" ]; then
+    cc="$(curl -fsS --max-time 6 "https://ipapi.co/${ip}/country/" 2>/dev/null | tr -cd 'A-Za-z' | tr '[:lower:]' '[:upper:]' | head -c 2 || true)"
+  fi
+  if [ -z "$cc" ]; then
+    cc="$(curl -fsS --max-time 6 https://www.cloudflare.com/cdn-cgi/trace 2>/dev/null | awk -F= '/^loc=/{print toupper($2); exit}' | tr -cd 'A-Z' | head -c 2 || true)"
+  fi
+  [ -n "$cc" ] && echo "$cc" || echo "XX"
+}
+
+sanitize_node_part() {
+  printf '%s' "$1" | tr '[:space:]' '-' | tr -cd 'A-Za-z0-9._-' | sed -E 's/-+/-/g; s/^-//; s/-$//'
+}
+
+default_node_name() {
+  local country host type
+  country="$(detect_ip_country_code)"
+  host="$(sanitize_node_part "$(hostname 2>/dev/null || echo vps)")"
+  host="${host:-vps}"
+  type="vmess-ws-argo"
+  echo "${country}-${host}-${type}"
+}
+
+is_nat_network() {
+  local pub priv defaults default_count
+  pub="$(public_ipv4)"
+  priv="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -nE 's/.* src ([0-9.]+).*/\1/p' | head -1)"
+  [ -n "$priv" ] || priv="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  default_count="$(ip -4 route show default 2>/dev/null | wc -l | tr -d ' ')"
+  case "$priv" in
+    10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|100.6[4-9].*|100.[7-9][0-9].*|100.1[0-1][0-9].*|100.12[0-7].*)
+      [ -n "$pub" ] && [ "$pub" != "$priv" ] && return 0
+      ;;
+  esac
+  [ "$default_count" -gt 1 ] 2>/dev/null && return 0
+  return 1
+}
+
+manual_bandwidth_prompt() {
+  local ans
+  if [ -n "${SPEED_BANDWIDTH_MBPS:-}" ] && echo "$SPEED_BANDWIDTH_MBPS" | grep -Eq '^[0-9]+$'; then
+    echo "$SPEED_BANDWIDTH_MBPS"
+    return 0
+  fi
+  if [ -t 0 ]; then
+    echo "" >&2
+    warn "检测到 NAT / LXC 环境，Ookla Speedtest 容易卡在 socket/latency 阶段。" >&2
+    printf "%b?%b 请选择上行带宽档位 Mbps：1)100  2)300  3)500  4)1000  5)自定义，默认 1000: " "$C_YELLOW" "$C_RESET" >&2
+    read -r ans || ans=""
+    case "${ans:-4}" in
+      1) echo 100 ;; 2) echo 300 ;; 3) echo 500 ;; 4|'') echo 1000 ;;
+      5) printf "%b?%b 输入上行带宽 Mbps: " "$C_YELLOW" "$C_RESET" >&2; read -r ans || ans=""; echo "${ans:-1000}" ;;
+      *) echo "$ans" ;;
+    esac | grep -E '^[0-9]+$' || echo 1000
+  else
+    echo 1000
+  fi
+}
+
 install_speedtest_cli() {
   command -v speedtest >/dev/null 2>&1 && return 0
   local arch url tmp
@@ -649,6 +715,12 @@ detect_bandwidth_profile() {
     BANDWIDTH_MBPS="$SPEED_BANDWIDTH_MBPS"
     BANDWIDTH_SOURCE="manual"
     BANDWIDTH_NOTE="由 SPEED_BANDWIDTH_MBPS 指定"
+    return 0
+  fi
+  if is_nat_network && [ "${SPEED_FORCE_SPEEDTEST:-0}" != "1" ]; then
+    BANDWIDTH_MBPS="$(manual_bandwidth_prompt)"
+    BANDWIDTH_SOURCE="manual-nat"
+    BANDWIDTH_NOTE="检测到 NAT/LXC 网络，已跳过 Ookla Speedtest；使用手动带宽 ${BANDWIDTH_MBPS} Mbps"
     return 0
   fi
   if [ "${SPEED_AUTO_SPEEDTEST:-1}" = "1" ]; then
@@ -1040,7 +1112,7 @@ write_argox_vmess_config() {
   local ws_path="${WS_PATH:-$DEFAULT_WS_PATH}"
   local start_port="${START_PORT:-$DEFAULT_START_PORT}"
   local nginx_port="${NGINX_PORT:-$DEFAULT_NGINX_PORT}"
-  local node_name="${NODE_NAME:-$DEFAULT_NODE_NAME}"
+  local node_name="${NODE_NAME:-$(default_node_name)}"
   local argo_domain="${ARGO_DOMAIN:-}"
   local argo_auth="${ARGO_AUTH:-}"
   local server="${SERVER:-}"
@@ -1119,12 +1191,12 @@ load_speed_config() {
   WS_PATH="${WS_PATH:-$DEFAULT_WS_PATH}"
   VMESS_WS_PORT="${VMESS_WS_PORT:-${START_PORT:-$DEFAULT_START_PORT}}"
   NGINX_PORT="${NGINX_PORT:-$DEFAULT_NGINX_PORT}"
-  NODE_NAME="${NODE_NAME:-Speed-Slayer}"
+  NODE_NAME="${NODE_NAME:-$(default_node_name)}"
 }
 
 write_native_xray_config() {
   cat > /etc/argox/inbound.json <<EOF
-{"log":{"loglevel":"warning","access":"/etc/argox/xray-access.log","error":"/etc/argox/xray-error.log"},"inbounds":[{"tag":"${NODE_NAME} vmess-ws","listen":"127.0.0.1","port":${VMESS_WS_PORT},"protocol":"vmess","settings":{"clients":[{"id":"${UUID}","alterId":0}]},"streamSettings":{"network":"ws","wsSettings":{"path":"/${WS_PATH}-vm"}},"sniffing":{"enabled":true,"destOverride":["http","tls"]}}],"outbounds":[{"protocol":"freedom","tag":"direct"}]}
+{"log":{"loglevel":"warning","access":"/etc/argox/xray-access.log","error":"/etc/argox/xray-error.log"},"inbounds":[{"tag":"${NODE_NAME}","listen":"127.0.0.1","port":${VMESS_WS_PORT},"protocol":"vmess","settings":{"clients":[{"id":"${UUID}","alterId":0}]},"streamSettings":{"network":"ws","wsSettings":{"path":"/${WS_PATH}-vm"}},"sniffing":{"enabled":true,"destOverride":["http","tls"]}}],"outbounds":[{"protocol":"freedom","tag":"direct"}]}
 EOF
 }
 
@@ -1133,7 +1205,7 @@ json_escape() { python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().r
 make_vmess_url() {
   local host="$1" server="${SERVER:-www.visa.com}" port="${SERVER_PORT:-443}" payload
   payload=$(cat <<EOF
-{"v":"2","ps":"$(printf '%s' "${NODE_NAME} vmess-ws" | json_escape)","add":"$(printf '%s' "$server" | json_escape)","port":"${port}","id":"${UUID}","aid":"0","scy":"none","net":"ws","type":"none","host":"$(printf '%s' "$host" | json_escape)","path":"/${WS_PATH}-vm","tls":"tls","sni":"$(printf '%s' "$host" | json_escape)","fp":"chrome"}
+{"v":"2","ps":"$(printf '%s' "${NODE_NAME}" | json_escape)","add":"$(printf '%s' "$server" | json_escape)","port":"${port}","id":"${UUID}","aid":"0","scy":"none","net":"ws","type":"none","host":"$(printf '%s' "$host" | json_escape)","path":"/${WS_PATH}-vm","tls":"tls","sni":"$(printf '%s' "$host" | json_escape)","fp":"chrome"}
 EOF
 )
   printf 'vmess://%s\n' "$(printf '%s' "$payload" | base64 -w0)"
@@ -1147,7 +1219,7 @@ write_native_subscriptions() {
   printf '%s\n' "$vmess_url" | base64 -w0 > /etc/argox/subscribe/base64
   cat > /etc/argox/subscribe/clash <<EOF
 proxies:
-  - name: "${NODE_NAME} vmess-ws"
+  - name: "${NODE_NAME}"
     type: vmess
     server: "${SERVER:-www.visa.com}"
     port: ${SERVER_PORT:-443}
@@ -1959,7 +2031,7 @@ Optional environment variables:
   WS_PATH                指定 WS Path 前缀，默认 argox，实际 path 为 /<WS_PATH>-vm
   START_PORT             指定 Xray VMess 内部监听端口，默认 30000
   NGINX_PORT             指定 Nginx/Argo 本地入口端口，默认 8001
-  NODE_NAME              指定节点名，默认 VPS-Argo-VMess
+  NODE_NAME              指定节点名，默认自动生成：国家代码-主机名-vmess-ws-argo
   ARGO_DOMAIN            固定 Argo 域名；不填则使用 trycloudflare 临时域名
   ARGO_AUTH              Argo Token / Json / Cloudflare API 信息；固定隧道时使用
   SERVER                 CDN 优选地址，默认 www.visa.com
@@ -2079,9 +2151,10 @@ menu_body() {
   1. Speed Slayer TCP+Argo 🚀
   2. 一键TCP调优
   3. 一键Vmess+Argo 节点生成
-  4. 诊断与日志
-  5. 修复/清理/卸载
-  6. 更新
+  4. 查看节点/订阅信息
+  5. 诊断与日志
+  6. 修复/清理/卸载
+  7. 更新
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EOF
@@ -2090,9 +2163,10 @@ EOF
       1) force_all; menu_pause ;;
       2) menu_section_tcp ;;
       3) menu_section_node ;;
-      4) menu_section_diag ;;
-      5) menu_section_repair ;;
-      6) menu_section_system ;;
+      4) show_argo_vmess_ws_info; menu_pause ;;
+      5) menu_section_diag ;;
+      6) menu_section_repair ;;
+      7) menu_section_system ;;
       0) exit 0 ;;
       *) err "无效选择"; menu_pause ;;
     esac
